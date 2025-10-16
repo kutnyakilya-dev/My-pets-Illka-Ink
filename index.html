@@ -13,7 +13,7 @@
     
 <script type="module">
         // --- Глобальные настройки и состояние ---
-        const CURRENT_UPDATE_VERSION = '2.1.3 Preview Hide'; // Изменено
+        const CURRENT_UPDATE_VERSION = '2.1.4 Gift'; // Изменено
         const PASSIVE_TICK_RATE = 1000; 
         const SOUND_COOLDOWN = 150; 
         let passiveIntervalId = null; 
@@ -35,6 +35,13 @@
         
         const FARMER_CASE_COST = 100.00; 
         const JUNGLE_CASE_COST = 2000.00;
+
+        // --- Настройки подарка ---
+        const ORIGINAL_MUSIC_SRC = "https://files.catbox.moe/b1gm68.mp3";
+        const BOOST_MUSIC_SRC = "https://files.catbox.moe/kayl7d.mp3";
+        const BOOST_DURATION_MS = 5 * 60 * 1000; // 5 минут
+        let originalBaseClickValue = window.gameState.baseClickValue;
+        let boostTimerIntervalId = null;
 
         // --- УЛУЧШЕНИЯ И ИХ СТОИМОСТЬ ---
         const UPGRADE_TIERS = {
@@ -103,6 +110,59 @@
             if (Tone.context.state !== 'running') Tone.start();
             if (navClickSynth) { try { const audioNow = Tone.context.currentTime; navClickSynth.triggerAttackRelease("G5", "32n", audioNow); navClickSynth.triggerAttackRelease("A5", "32n", audioNow + 0.05); } catch (e) { console.error("Audio scheduling error:", e); } }
         }
+
+        // --- Логика подарка ---
+        function startBoost() {
+            originalBaseClickValue = window.gameState.baseClickValue;
+            window.gameState.baseClickValue = 5.0;
+
+            const audio = document.getElementById('backgroundMusic');
+            audio.src = BOOST_MUSIC_SRC;
+            if (isMusicPlaying || Tone.context.state === 'running') {
+                audio.play();
+            }
+
+            document.getElementById('boost-modal').style.display = 'flex';
+            const timerDisplay = document.getElementById('boost-timer-display');
+            timerDisplay.style.display = 'block';
+            
+            let timeLeft = BOOST_DURATION_MS;
+            updateClickValueDisplay();
+            
+            function updateTimer() {
+                const minutes = Math.floor((timeLeft / 1000) / 60);
+                const seconds = Math.floor((timeLeft / 1000) % 60);
+                timerDisplay.textContent = `Бонус: ${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+                timeLeft -= 1000;
+            }
+            updateTimer();
+            boostTimerIntervalId = setInterval(updateTimer, 1000);
+            
+            setTimeout(endBoost, BOOST_DURATION_MS);
+        }
+
+        function endBoost() {
+            if (boostTimerIntervalId) {
+                clearInterval(boostTimerIntervalId);
+                boostTimerIntervalId = null;
+            }
+
+            window.gameState.baseClickValue = originalBaseClickValue;
+            const audio = document.getElementById('backgroundMusic');
+            audio.src = ORIGINAL_MUSIC_SRC;
+            if (isMusicPlaying) {
+                audio.play();
+            }
+
+            document.getElementById('boost-timer-display').style.display = 'none';
+            updateClickValueDisplay();
+            showToast("🎁 Подарок закончился! Сила клика и музыка вернулись к норме.");
+        }
+
+        window.closeBoostModal = function() {
+            playNavClickSound();
+            document.getElementById('boost-modal').style.display = 'none';
+        };
 
         function calculateClickValue() {
             let totalBonus = 0;
@@ -670,6 +730,11 @@
             setupClickListener(); 
             setupResetConfirmationListener();
             window.checkAndShowUpdatesScreen(); 
+
+            if (!localStorage.getItem('giftClaimed_Oct2025_v2')) {
+                startBoost();
+                localStorage.setItem('giftClaimed_Oct2025_v2', 'true');
+            }
         }
         
         window.setupNavigation = function() {
@@ -732,6 +797,18 @@
         @keyframes mega-secret-modal-glow { 0%, 100% { box-shadow: 0 0 30px #ffdf00, inset 0 0 15px #ffdf0044; border-color: #ffdf00; } 50% { box-shadow: 0 0 40px #ffA500, inset 0 0 20px #ffA50055; border-color: #ffA500; } }
         .modal-mega-secret-glow { border: 2px solid; animation: mega-secret-modal-glow 2s infinite alternate; }
 
+        /* СТИЛИ ДЛЯ ПОДАРКА */
+        @keyframes rainbow-bg {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        .bg-rainbow-animated {
+            background: linear-gradient(45deg, #ff0000, #ff7300, #fffb00, #48ff00, #00ffd5, #002bff, #7a00ff, #ff00c8);
+            background-size: 400% 400%;
+            animation: rainbow-bg 10s ease infinite;
+        }
+
     </style>
 </head>
 <body class="bg-gray-900 min-h-screen">
@@ -741,6 +818,7 @@
         <div class="text-white text-xl font-black tracking-wider">Pet Farm</div>
         <div class="flex flex-col items-end">
             <p id="paws-display" class="text-lg font-extrabold text-orange-400">Лапки: 0.00</p>
+            <p id="boost-timer-display" class="text-sm font-bold text-yellow-300" style="display: none;"></p>
             <p id="user-id-display" class="text-xs text-gray-400 mt-0">Локальное хранилище</p>
         </div>
     </header>
@@ -858,6 +936,14 @@
         </div>
     </div>
 
+    <!-- МОДАЛЬНОЕ ОКНО ПОДАРКА -->
+    <div id="boost-modal" class="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-[1100] p-4" style="display: none;">
+        <div class="bg-rainbow-animated p-8 rounded-2xl text-center shadow-2xl w-full max-w-md">
+            <h2 class="text-4xl font-extrabold text-white mb-4" style="text-shadow: 2px 2px 4px #000000;">СИЛА КЛИКА 5</h2>
+            <p class="text-2xl text-white font-bold" style="text-shadow: 2px 2px 4px #000000;">ВЕСЕЛИТЕСЬ!</p>
+            <button onclick="closeBoostModal()" class="w-full py-3 bg-white/20 hover:bg-white/30 text-white font-bold rounded-xl mt-6 backdrop-blur-sm">ОК!</button>
+        </div>
+    </div>
+
 </body>
 </html>
-
