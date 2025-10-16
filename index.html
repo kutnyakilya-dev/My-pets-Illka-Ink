@@ -432,6 +432,7 @@
             document.getElementById('case-details-title').textContent = caseData.name;
             renderCasePreview(caseId);
             const openButton = document.getElementById('open-case-button'); 
+            openButton.onclick = window.startCaseSpin; // ВОССТАНОВЛЕНА ЭТА СТРОКА
             const canAfford = window.gameState.paws >= caseData.cost;
             openButton.classList.remove('bg-red-500', 'hover:bg-red-400', 'bg-blue-500', 'hover:bg-blue-400', 'opacity-50', 'cursor-not-allowed');
             const costText = `${caseData.cost.toFixed(2)} Лапок`;
@@ -740,5 +741,6 @@
     </div>
 </body>
 </html>
+
 
 
