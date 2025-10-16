@@ -12,6 +12,33 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
     
 <script type="module">
+        // --- Firebase Integration ---
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-auth.js";
+        import { getFirestore } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js";
+
+        // Your web app's Firebase configuration (as a fallback)
+        const userFirebaseConfig = {
+          apiKey: "AIzaSyARZvFpMMn5t8pg5gb2bWA6OrZC1L8DBSA",
+          authDomain: "my-pet-c8684.firebaseapp.com",
+          projectId: "my-pet-c8684",
+          storageBucket: "my-pet-c8684.firebasestorage.app",
+          messagingSenderId: "102742166711",
+          appId: "1:102742166711:web:aa6b251fd6d6c993c71132"
+        };
+        
+        // Prioritize environment-provided config
+        const firebaseConfig = typeof __firebase_config !== 'undefined' 
+            ? JSON.parse(__firebase_config) 
+            : userFirebaseConfig;
+
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        let userId = null;
+
         // --- Глобальные настройки и состояние ---
         const CURRENT_UPDATE_VERSION = '2.1.7 Hotfix'; // Изменено
         const PASSIVE_TICK_RATE = 1000; 
@@ -729,21 +756,50 @@
             if (localStorage.getItem('lastShownUpdateVersion') !== CURRENT_UPDATE_VERSION) { localStorage.setItem('lastShownUpdateVersion', CURRENT_UPDATE_VERSION); }
         };
 
-        async function initGame() {
-            updateAppState(false); 
-            window.gameState.paws = loadPaws();
-            migrateInventory(); 
-            window.gameState.isDbReady = true;
-            updatePawsDisplay();
-            updateAppState(true); 
-            document.addEventListener('visibilitychange', handleVisibilityChange);
-            managePassiveLoop(); 
-            window.setupNavigation();
-            setupUpdatesContent(); 
-            setupClickListener(); 
-            setupResetConfirmationListener();
-            requestWakeLock();
-            window.checkAndShowUpdatesScreen(); 
+        function initGame() {
+            updateAppState(false);
+
+            onAuthStateChanged(auth, async (user) => {
+                if (!user) {
+                    // If no user, sign in. This will trigger onAuthStateChanged again.
+                    try {
+                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                            await signInWithCustomToken(auth, __initial_auth_token);
+                        } else {
+                            await signInAnonymously(auth);
+                        }
+                    } catch (error) {
+                        console.error("Authentication Error:", error);
+                        document.getElementById('user-id-display').textContent = 'Ошибка входа';
+                    }
+                    return; // Wait for the next auth state change
+                }
+
+                // --- At this point, we have a user ---
+                userId = user.uid;
+                document.getElementById('user-id-display').textContent = `ID: ${userId}`;
+                console.log("Firebase user ready:", userId);
+
+                // Prevent re-initializing the game data
+                if (window.gameState.isDbReady) {
+                    return;
+                }
+
+                // --- Auth is ready, now load the game ---
+                window.gameState.paws = loadPaws();
+                migrateInventory(); 
+                window.gameState.isDbReady = true;
+                updatePawsDisplay();
+                updateAppState(true); 
+                document.addEventListener('visibilitychange', handleVisibilityChange);
+                managePassiveLoop(); 
+                window.setupNavigation();
+                setupUpdatesContent(); 
+                setupClickListener(); 
+                setupResetConfirmationListener();
+                requestWakeLock();
+                window.checkAndShowUpdatesScreen(); 
+            });
         }
         
         window.setupNavigation = function() {
@@ -820,7 +876,7 @@
         <div class="text-white text-xl font-black tracking-wider">Pet Farm</div>
         <div class="flex flex-col items-end">
             <p id="paws-display" class="text-lg font-extrabold text-orange-400">Лапки: 0.00</p>
-            <p id="user-id-display" class="text-xs text-gray-400 mt-0">Локальное хранилище</p>
+            <p id="user-id-display" class="text-xs text-gray-400 mt-0 truncate max-w-[150px]">Подключение...</p>
         </div>
     </header>
 
