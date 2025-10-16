@@ -395,8 +395,20 @@
         window.startCaseSpin = function() {
             playMusic(); 
             const caseData = CASES[currentCaseId];
-            if (!caseData || !window.gameState.isDbReady) return showToast("Игра загружается...");
-            if (window.gameState.paws < caseData.cost) return showToast(`Не хватает ${caseData.cost.toFixed(2)} Лапок!`);
+
+            // --- ИСПРАВЛЕНИЕ БАГА: Более точные проверки ---
+            if (!caseData) {
+                return showToast("Ошибка: Данные кейса не найдены. Попробуйте перезайти.");
+            }
+            if (!window.gameState.isDbReady) {
+                return showToast("Подождите, игра еще загружается...");
+            }
+            if (window.gameState.paws < caseData.cost) {
+                // Эта проверка дублируется в showCaseDetails, но оставим ее для надежности
+                return showToast(`Не хватает ${caseData.cost.toFixed(2)} Лапок!`);
+            }
+            // --- КОНЕЦ ИСПРАВЛЕНИЯ ---
+
             window.gameState.paws -= caseData.cost;
             savePaws(window.gameState.paws);
             updatePawsDisplay();
@@ -728,4 +740,5 @@
     </div>
 </body>
 </html>
+
 
