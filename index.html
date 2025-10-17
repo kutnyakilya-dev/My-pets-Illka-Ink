@@ -1,0 +1,948 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pet Farm Clicker</title>
+    
+<script src="https://cdn.tailwindcss.com"></script>
+    
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    
+<script type="module">
+        // --- Глобальные настройки и состояние ---
+        const CURRENT_UPDATE_VERSION = '2.1.7 Hotfix'; // Изменено
+        const PASSIVE_TICK_RATE = 1000; 
+        const SOUND_COOLDOWN = 150; 
+        let passiveIntervalId = null; 
+        let lastSoundTime = 0; 
+        let currentCaseId = 'farmer'; 
+        window.gameState = {
+            paws: 0.00, 
+            baseClickValue: 0.09,
+            inventory: [], 
+            isDbReady: false, 
+            selectedPets: [], 
+            passiveRate: 0.00, 
+            upgrades: {
+                equippedPetsLevel: 0, 
+            },
+            foundPets: [], 
+            isCollectionRewardClaimed: false,
+        };
+        
+        const FARMER_CASE_COST = 100.00; 
+        const JUNGLE_CASE_COST = 2000.00;
+
+        // --- УЛУЧШЕНИЯ И ИХ СТОИМОСТЬ ---
+        const UPGRADE_TIERS = {
+            equippedPets: [
+                { level: 1, cost: 2000.00, newMax: 4, name: "Дополнительное Место (I)" },
+                { level: 2, cost: 4000.00, newMax: 5, name: "Дополнительное Место (II)" },
+            ]
+        };
+
+        // --- СПИСОК ПРЕДМЕТОВ С РЕДКОСТЯМИ, ЦВЕТАМИ И ЦЕНАМИ ПРОДАЖИ ---
+        const FARMER_CASE_ITEMS = [
+            { name: "Собака", rarity: "Обычный", border: "border-gray-400", color: "text-gray-400", weight: 35.00, icon: "https://files.catbox.moe/nccx9g.png", value: 25.00, passiveValue: 0.08 },
+            { name: "Овца", rarity: "Обычный", border: "border-gray-400", color: "text-gray-400", weight: 35.00, icon: "https://files.catbox.moe/v2hob0.png", value: 40.00, passiveValue: 0.10 }, 
+            { name: "Корова", rarity: "Необычный", border: "border-blue-500", color: "text-blue-500", weight: 10.00, icon: "https://files.catbox.moe/o08ewe.png", value: 60.00, passiveValue: 0.13 }, 
+            { name: "Лиса", rarity: "Необычный", border: "border-blue-500", color: "text-blue-500", weight: 10.00, icon: "https://files.catbox.moe/pl1ae0.png", value: 67.00, passiveValue: 0.15 }, 
+            { name: "Пчела", rarity: "Ультра Редкий", border: "border-purple-600", color: "text-purple-600", weight: 3.00, icon: "https://files.catbox.moe/kvm7wb.png", value: 100.00, passiveValue: 0.23 },
+            { name: "Козлик", rarity: "Ультра Редкий", border: "border-purple-600", color: "text-purple-600", weight: 3.00, icon: "https://files.catbox.moe/yjd6lu.png", value: 101.00, passiveValue: 0.24 },
+            { name: "Петух", rarity: "Легендарный", border: "border-yellow-400", color: "text-yellow-400", weight: 2.50, icon: "https://files.catbox.moe/v40m5p.png", value: 190.00, passiveValue: 0.33 },
+            { name: "Утка-Тыква", rarity: "Мифический", border: "border-red-500", color: "text-red-500", weight: 1.25, icon: "https://files.catbox.moe/a5vory.png", value: 400.00, passiveValue: 0.63 },
+            { name: "Радугобар", rarity: "Секретный", border: "border-rainbow", color: "text-orange-400", weight: 0.25, icon: "https://files.catbox.moe/42dehy.png", value: 1000.00, passiveValue: 1.11, isHiddenInPreview: true, previewName: "Секретный", previewIcon: "https://placehold.co/60x60/374151/fff?text=?" }, 
+        ];
+
+        const JUNGLE_CASE_ITEMS = [
+            { name: "Жук", rarity: "Обычный", border: "border-gray-400", color: "text-gray-400", weight: 34.975, icon: "https://files.catbox.moe/r8hzet.jpg", value: 250.00, passiveValue: 0.80 },
+            { name: "Бурундук", rarity: "Обычный", border: "border-gray-400", color: "text-gray-400", weight: 34.975, icon: "https://files.catbox.moe/xmeoz7.jpg", value: 300.00, passiveValue: 0.90 },
+            { name: "Волк", rarity: "Необычный", border: "border-blue-500", color: "text-blue-500", weight: 10.00, icon: "https://files.catbox.moe/16lk6v.jpg", value: 550.00, passiveValue: 1.30 },
+            { name: "Паук", rarity: "Необычный", border: "border-blue-500", color: "text-blue-500", weight: 10.00, icon: "https://files.catbox.moe/zz5f84.jpg", value: 600.00, passiveValue: 1.55 },
+            { name: "Ящерица", rarity: "Ультра Редкий", border: "border-purple-600", color: "text-purple-600", weight: 3.00, icon: "https://files.catbox.moe/22onk4.jpg", value: 800.00, passiveValue: 1.80 },
+            { name: "Панда", rarity: "Ультра Редкий", border: "border-purple-600", color: "text-purple-600", weight: 3.00, icon: "https://files.catbox.moe/rxydzq.jpg", value: 1100.00, passiveValue: 2.40 },
+            { name: "Жираф", rarity: "Легендарный", border: "border-yellow-400", color: "text-yellow-400", weight: 1.25, icon: "https://files.catbox.moe/xstk1s.jpg", value: 2600.00, passiveValue: 4.30 },
+            { name: "Попугай Ара", rarity: "Легендарный", border: "border-yellow-400", color: "text-yellow-400", weight: 1.25, icon: "https://files.catbox.moe/yqz28i.jpg", value: 2400.00, passiveValue: 4.00 },
+            { name: "Четырёх-головая Кобра", rarity: "Мифический", border: "border-red-500", color: "text-red-500", weight: 0.625, icon: "https://files.catbox.moe/7nor3l.jpg", value: 3500.00, passiveValue: 6.60, clickBonus: 0.02 },
+            { name: "Горилла Мандарина", rarity: "Мифический", border: "border-red-500", color: "text-red-500", weight: 0.625, icon: "https://files.catbox.moe/2s07bm.jpg", value: 4400.00, passiveValue: 7.00, clickBonus: 0.02 },
+            { name: "Пантера", rarity: "Секретный", border: "border-rainbow", color: "text-orange-400", weight: 0.125, icon: "https://files.catbox.moe/gkav13.jpg", value: 10000.00, passiveValue: 9.00, isHiddenInPreview: true, previewName: "Секретный", previewIcon: "https://placehold.co/60x60/374151/fff?text=?", clickBonus: 0.02 },
+            { name: "Огненный Тигр", rarity: "Секретный", border: "border-rainbow", color: "text-orange-400", weight: 0.125, icon: "https://files.catbox.moe/wg01g8.jpg", value: 12000.00, passiveValue: 10.80, isHiddenInPreview: true, previewName: "Секретный", previewIcon: "https://placehold.co/60x60/374151/fff?text=?", clickBonus: 0.02 },
+            { name: "Оранкл", rarity: "Мега Секретный", border: "border-mega-secret", color: "text-yellow-200", weight: 0.05, icon: "https://files.catbox.moe/p26t9k.jpg", value: 30000.00, passiveValue: 30.00, isHiddenInPreview: true, previewName: "?????", previewIcon: "https://placehold.co/60x60/374151/fff?text=?", isMegaSecret: true, clickBonus: 0.04 },
+        ];
+
+        const CASES = {
+             farmer: { name: "Фермерский Кейс", cost: FARMER_CASE_COST, items: FARMER_CASE_ITEMS, icon: "https://files.catbox.moe/teasjx.png", description: "В нем животные со всей фермы!", totalWeight: FARMER_CASE_ITEMS.reduce((sum, item) => sum + item.weight, 0) },
+             jungle: { name: "Джунглийский Кейс", cost: JUNGLE_CASE_COST, items: JUNGLE_CASE_ITEMS, icon: "https://files.catbox.moe/adaf91.jpg", description: "Экзотические животные из диких джунглей!", totalWeight: JUNGLE_CASE_ITEMS.reduce((sum, item) => sum + item.weight, 0) }
+        };
+
+        const ALL_PETS = [...new Map([...FARMER_CASE_ITEMS, ...JUNGLE_CASE_ITEMS].map(item => [item.name, item])).values()];
+        const COLLECTION_REWARD = 22222;
+
+        function getMaxSelectedPets() {
+            const level = window.gameState.upgrades.equippedPetsLevel;
+            if (level === 1) return 4;
+            if (level === 2) return 5;
+            return 3;
+        }
+        
+        let clickPlayer, navClickSynth, reelTickSynth, isMusicPlaying = false; 
+        function playMusic() {
+            const audio = document.getElementById('backgroundMusic');
+            if (!isMusicPlaying) { audio.volume = 0.2; audio.play().then(() => { isMusicPlaying = true; }).catch(e => { console.warn("Ошибка автозапуска фоновой музыки:", e); }); }
+        }
+        try { clickPlayer = new Tone.PluckSynth().toDestination(); clickPlayer.volume.value = -10; } catch (e) { console.error("Критическая ошибка инициализации PluckSynth:", e); }
+        try { navClickSynth = new Tone.MembraneSynth({ pitchDecay: 0.008, octaves: 0.1, envelope: { attack: 0.001, decay: 0.1, sustain: 0.0, release: 0.05 } }).toDestination(); navClickSynth.volume.value = -12; } catch (e) { console.error("Ошибка инициализации navClickSynth:", e); }
+        try { reelTickSynth = new Tone.Synth({ oscillator: { type: 'sine' }, envelope: { attack: 0.001, decay: 0.05, sustain: 0, release: 0.1 } }).toDestination(); reelTickSynth.volume.value = -18; } catch (e) { console.error("Ошибка инициализации reelTickSynth:", e); }
+        
+        function playNavClickSound() {
+            const now = Date.now();
+            if (now - lastSoundTime < SOUND_COOLDOWN) return;
+            lastSoundTime = now;
+            if (Tone.context.state !== 'running') Tone.start();
+            if (navClickSynth) { try { const audioNow = Tone.context.currentTime; navClickSynth.triggerAttackRelease("G5", "32n", audioNow); navClickSynth.triggerAttackRelease("A5", "32n", audioNow + 0.05); } catch (e) { console.error("Audio scheduling error:", e); } }
+        }
+
+        // --- Screen Wake Lock ---
+        let wakeLock = null;
+        const requestWakeLock = async () => {
+            if ('wakeLock' in navigator) {
+                try {
+                    wakeLock = await navigator.wakeLock.request('screen');
+                    console.log('Screen Wake Lock is active.');
+                    wakeLock.addEventListener('release', () => {
+                        wakeLock = null;
+                        console.log('Screen Wake Lock was released.');
+                    });
+                } catch (err) {
+                    console.error(`${err.name}, ${err.message}`);
+                }
+            } else {
+                console.warn('Wake Lock API not supported.');
+            }
+        };
+
+        function calculateClickValue() {
+            let totalBonus = 0;
+            const activePets = window.gameState.inventory.filter(pet => window.gameState.selectedPets.includes(pet.id));
+            activePets.forEach(pet => { if (pet.clickBonus) totalBonus += pet.clickBonus; });
+            return window.gameState.baseClickValue + totalBonus;
+        }
+
+        function calculatePassiveRate() {
+            let totalRate = 0.00;
+            const activePets = window.gameState.inventory.filter(pet => window.gameState.selectedPets.includes(pet.id));
+            activePets.forEach(pet => { if (pet.passiveValue) totalRate += pet.passiveValue; });
+            window.gameState.passiveRate = totalRate;
+            return totalRate;
+        }
+
+        function showToast(message) {
+            const modal = document.getElementById('notification-modal');
+            document.getElementById('notification-text').textContent = message;
+            modal.style.display = 'flex';
+            setTimeout(() => { modal.style.display = 'none'; }, 3000);
+        }
+        
+        function updateClickValueDisplay() {
+            const totalClickValue = calculateClickValue();
+            document.getElementById('click-power-display').textContent = `Сила клика: ${totalClickValue.toFixed(2)}`;
+        }
+        
+        function updatePawsDisplay() {
+            const rate = calculatePassiveRate();
+            document.getElementById('paws-display').textContent = `Лапки: ${window.gameState.paws.toFixed(2)}`;
+            document.getElementById('passive-rate-display').textContent = `Авто: +${rate.toFixed(2)} / с`; 
+            updateClickValueDisplay();
+            if (document.getElementById('case-details-section').style.display !== 'none') { window.showCaseDetails(currentCaseId, true); }
+        }
+
+        function updateAppState(isReady) {
+            const clickButton = document.getElementById('click-button');
+            const loadingMessage = document.getElementById('loading-message');
+            const clickMessage = document.getElementById('click-message');
+            if (isReady) {
+                clickButton.disabled = false;
+                loadingMessage.style.display = 'none';
+                clickMessage.style.display = 'block';
+                clickButton.classList.remove('opacity-50', 'cursor-not-allowed', 'bg-gray-600');
+                clickButton.classList.add('bg-orange-500', 'hover:bg-orange-400', 'hover:shadow-xl');
+            } else {
+                clickButton.disabled = true;
+                loadingMessage.style.display = 'block';
+                clickMessage.style.display = 'none';
+                clickButton.classList.remove('bg-orange-500', 'hover:bg-orange-400', 'hover:shadow-xl');
+                clickButton.classList.add('opacity-50', 'cursor-not-allowed', 'bg-gray-600');
+            }
+        }
+        
+        function loadPaws() {
+            try {
+                window.gameState.inventory = JSON.parse(localStorage.getItem('petFarmInventory')) || [];
+                window.gameState.selectedPets = JSON.parse(localStorage.getItem('petFarmSelectedPets')) || []; 
+                window.gameState.upgrades = JSON.parse(localStorage.getItem('petFarmUpgrades')) || { equippedPetsLevel: 0 };
+                window.gameState.foundPets = JSON.parse(localStorage.getItem('petFarmFoundPets')) || [];
+                window.gameState.isCollectionRewardClaimed = JSON.parse(localStorage.getItem('petFarmCollectionRewardClaimed')) || false;
+                return parseFloat(localStorage.getItem('petFarmPaws')) || 0.00;
+            } catch (e) {
+                console.error("Ошибка при загрузке из LocalStorage:", e);
+                Object.assign(window.gameState, { inventory: [], selectedPets: [], upgrades: { equippedPetsLevel: 0 }, foundPets: [], isCollectionRewardClaimed: false });
+                return 0.00;
+            }
+        }
+        function savePaws(value) {
+            try {
+                localStorage.setItem('petFarmPaws', value.toFixed(2));
+                localStorage.setItem('petFarmInventory', JSON.stringify(window.gameState.inventory));
+                localStorage.setItem('petFarmSelectedPets', JSON.stringify(window.gameState.selectedPets)); 
+                localStorage.setItem('petFarmUpgrades', JSON.stringify(window.gameState.upgrades));
+                localStorage.setItem('petFarmFoundPets', JSON.stringify(window.gameState.foundPets));
+                localStorage.setItem('petFarmCollectionRewardClaimed', JSON.stringify(window.gameState.isCollectionRewardClaimed));
+            } catch (e) { console.error("Ошибка при сохранении в LocalStorage:", e); }
+        }
+        
+        function migrateInventory() {
+            let inventoryChanged = false;
+            const masterMap = new Map(ALL_PETS.map(item => [item.name, item]));
+            window.gameState.inventory = window.gameState.inventory.map(pet => {
+                const masterItem = masterMap.get(pet.name);
+                if (masterItem) {
+                    let petUpdated = false;
+                    ['passiveValue', 'border', 'color', 'rarity', 'value', 'clickBonus', 'icon'].forEach(prop => {
+                        if (pet[prop] !== masterItem[prop]) { pet[prop] = masterItem[prop]; petUpdated = true; }
+                    });
+                    if (petUpdated) inventoryChanged = true;
+                }
+                return pet;
+            });
+            if (inventoryChanged) { savePaws(window.gameState.paws); showToast("✅ Инвентарь обновлен!"); }
+        }
+        
+        window.showResetConfirmation = function() { 
+            playNavClickSound(); 
+            const modal = document.getElementById('reset-confirm-modal');
+            const input = document.getElementById('reset-confirm-input');
+            const confirmBtn = document.getElementById('reset-confirm-button');
+            input.value = ''; // Clear previous input
+            confirmBtn.disabled = true; // Disable button
+            confirmBtn.classList.add('bg-red-800', 'text-gray-500', 'cursor-not-allowed');
+            confirmBtn.classList.remove('bg-red-600', 'hover:bg-red-500');
+            modal.style.display = 'flex'; 
+        };
+
+        window.closeResetConfirmation = function() {
+            playNavClickSound();
+            document.getElementById('reset-confirm-modal').style.display = 'none';
+        };
+            
+        window.performReset = function() { 
+            const input = document.getElementById('reset-confirm-input');
+            if (input.value !== 'удалить данные') {
+                return showToast("Ошибка: Текст для подтверждения введен неверно.");
+            }
+            playNavClickSound(); 
+            showToast("Сброс прогресса..."); 
+            localStorage.clear(); 
+            window.location.reload(); 
+        };
+
+        window.showSellConfirmation = function(petId) {
+            window.closePetPreview();
+            playNavClickSound();
+            const pet = window.gameState.inventory.find(p => p.id === petId);
+            if (!pet || pet.value === undefined) return showToast("Ошибка: Цена продажи не найдена.");
+            const modal = document.getElementById('sell-confirm-modal');
+            const price = pet.value.toFixed(2);
+            document.getElementById('sell-pet-name').textContent = pet.name;
+            document.getElementById('sell-pet-price').textContent = price;
+            document.getElementById('sell-confirm-button').setAttribute('data-pet-id', petId);
+            document.getElementById('sell-confirm-button').textContent = `Продать за ${price} Лапок`;
+            modal.style.display = 'flex';
+        };
+        window.performSell = function() {
+            playNavClickSound();
+            const petId = document.getElementById('sell-confirm-button').getAttribute('data-pet-id');
+            document.getElementById('sell-confirm-modal').style.display = 'none';
+            if (!petId) return showToast("Ошибка: ID питомца не найден.");
+            const petIndex = window.gameState.inventory.findIndex(p => p.id === petId);
+            if (petIndex === -1) return showToast("Ошибка: Питомец не найден.");
+            const pet = window.gameState.inventory[petIndex];
+            window.gameState.paws += pet.value;
+            window.gameState.selectedPets = window.gameState.selectedPets.filter(id => id !== petId);
+            window.gameState.inventory.splice(petIndex, 1);
+            savePaws(window.gameState.paws);
+            updatePawsDisplay();
+            renderInventory();
+            showToast(`💰 Продано: ${pet.name} за ${pet.value.toFixed(2)} Лапок!`);
+        };
+
+        window.equipBestPets = function() {
+            playNavClickSound();
+            const maxPets = getMaxSelectedPets();
+            const availablePets = window.gameState.inventory.filter(pet => pet.passiveValue > 0);
+            if (availablePets.length === 0) return showToast("У вас нет питомцев, приносящих доход!");
+            availablePets.sort((a, b) => b.passiveValue - a.passiveValue);
+            window.gameState.selectedPets = availablePets.slice(0, maxPets).map(pet => pet.id);
+            savePaws(window.gameState.paws);
+            updatePawsDisplay();
+            renderInventory(); 
+            showToast(`✅ Выбраны ${window.gameState.selectedPets.length} лучших питомцев!`);
+        };
+        window.togglePetSelection = function(petId) {
+            playNavClickSound();
+            const maxPets = getMaxSelectedPets();
+            let pets = window.gameState.selectedPets;
+            const isSelected = pets.includes(petId);
+            if (isSelected) {
+                window.gameState.selectedPets = pets.filter(id => id !== petId);
+                showToast("Питомец убран из активных.");
+            } else {
+                const pet = window.gameState.inventory.find(p => p.id === petId);
+                if (!pet.passiveValue && !pet.clickBonus) return showToast("Этот питомец не дает бонусов.");
+                if (pets.length < maxPets) {
+                    window.gameState.selectedPets.push(petId);
+                    showToast(`Питомец добавлен в активные!`);
+                } else {
+                    return showToast(`Достигнут лимит активных питомцев (${maxPets})!`);
+                }
+            }
+            savePaws(window.gameState.paws);
+            updatePawsDisplay();
+            renderInventory();
+            window.closePetPreview();
+        };
+
+        window.showUpgradesModal = function() { playNavClickSound(); renderUpgradesModalContent(); document.getElementById('upgrades-modal').style.display = 'flex'; };
+        window.closeUpgradesModal = function() { playNavClickSound(); document.getElementById('upgrades-modal').style.display = 'none'; };
+        function renderUpgradesModalContent() {
+            const container = document.getElementById('upgrades-list-container');
+            const currentLevel = window.gameState.upgrades.equippedPetsLevel;
+            const tiers = UPGRADE_TIERS.equippedPets;
+            let html = '';
+            tiers.forEach(tier => {
+                const isPurchased = currentLevel >= tier.level;
+                const isNext = currentLevel === tier.level - 1;
+                const costDisplay = tier.cost.toFixed(2);
+                let cardClass = 'bg-gray-700 p-4 rounded-xl flex flex-col sm:flex-row items-center justify-between transition-all duration-150';
+                let buttonClass = 'py-2 px-4 rounded-lg font-bold transition-colors shadow-lg w-full sm:w-auto mt-3 sm:mt-0';
+                let buttonText, buttonDisabled = false;
+                if (isPurchased) { cardClass += ' border-l-4 border-green-500 opacity-75'; buttonClass += ' bg-green-700 text-gray-400 cursor-not-allowed'; buttonText = 'Куплено'; buttonDisabled = true; } 
+                else if (isNext) {
+                    const canAfford = window.gameState.paws >= tier.cost;
+                    if (canAfford) { cardClass += ' border-l-4 border-yellow-500'; buttonClass += ' bg-yellow-500 hover:bg-yellow-400 text-gray-900'; buttonText = `Купить за ${costDisplay}`; } 
+                    else { cardClass += ' border-l-4 border-red-500 opacity-70'; buttonClass += ' bg-red-700 text-gray-500 cursor-not-allowed'; buttonText = `Не хватает (${costDisplay})`; buttonDisabled = true; }
+                } else { cardClass += ' border-l-4 border-gray-600 opacity-50'; buttonClass += ' bg-gray-600 text-gray-400 cursor-not-allowed'; buttonText = 'Заблокировано'; buttonDisabled = true; }
+                const currentLimit = getMaxSelectedPets(), nextLimit = tier.newMax;
+                html += `<div class="${cardClass}"><div class="flex flex-col flex-grow text-center sm:text-left"><p class="text-xl font-bold text-white">${tier.name}</p><p class="text-sm text-gray-400 mt-1">Лимит: <span class="text-blue-400">${currentLimit}</span> → <span class="text-yellow-400">${nextLimit}</span></p>${isPurchased ? `<p class="text-xs text-green-400 mt-2 font-bold">Активно.</p>` : ''}</div><button onclick="window.buyUpgrade('equippedPets', ${tier.level})" class="${buttonClass} ml-0 sm:ml-4 whitespace-nowrap" ${buttonDisabled ? 'disabled' : ''}>${buttonText}</button></div>`;
+            });
+            if (currentLevel === tiers.length) html += `<div class="p-4 bg-gray-800 rounded-xl text-center mt-4 border-2 border-dashed border-blue-500"><p class="text-lg font-bold text-blue-400">✅ Все улучшения куплены!</p><p class="text-sm text-gray-400">Максимальный лимит: ${getMaxSelectedPets()} питомцев.</p></div>`;
+            container.innerHTML = html;
+        }
+        window.buyUpgrade = function(upgradeType, level) {
+            playNavClickSound();
+            const tier = UPGRADE_TIERS[upgradeType]?.find(t => t.level === level);
+            if (!tier || window.gameState.upgrades[`${upgradeType}Level`] !== level - 1) return showToast("Ошибка: Сначала купите предыдущий уровень.");
+            if (window.gameState.paws < tier.cost) return showToast("Недостаточно Лапок.");
+            window.gameState.paws -= tier.cost;
+            window.gameState.upgrades[`${upgradeType}Level`] = level;
+            savePaws(window.gameState.paws);
+            updatePawsDisplay();
+            renderInventory();
+            renderUpgradesModalContent();
+            showToast(`🎉 Успешно! Лимит питомцев увеличен до ${tier.newMax}!`);
+        };
+        
+        function getIconHtml(item, isLarge = false, isReel = false, isPreview = false, isWinModal = false) {
+             if (item.isMegaSecret && isReel && !isWinModal) {
+                return '<div class="w-full h-full flex items-center justify-center text-4xl font-black text-white" style="text-shadow: 0 0 10px #000;">?</div>';
+             }
+             let iconUrl = item.icon && item.icon.startsWith('http') ? item.icon : 'https://placehold.co/60x60/374151/fff?text=?';
+             const isSecretHidden = item.isHiddenInPreview && (isReel || isPreview) && !isWinModal;
+             if (isSecretHidden) iconUrl = item.previewIcon;
+             let sizeClass = isReel || isWinModal ? 'w-full h-full' : (isLarge ? 'w-12 h-12' : 'w-10 h-10');
+             let marginClass = isReel || isWinModal ? '' : (isLarge ? 'mr-4 flex-shrink-0' : 'mr-3');
+             return `<img src="${iconUrl}" alt="${item.name}" class="${sizeClass} object-cover bg-gray-700 ${marginClass} rounded-lg" onerror="this.onerror=null;this.src='https://placehold.co/40x40/374151/fff?text=?';">`;
+        }
+        function renderInventory() {
+            const inventoryContainer = document.getElementById('inventory-container');
+            const emptyState = document.getElementById('inventory-empty-state');
+            document.getElementById('active-pets-count').textContent = `Активных: ${window.gameState.selectedPets.length} / ${getMaxSelectedPets()}`;
+            if (window.gameState.inventory.length === 0) { emptyState.style.display = 'flex'; inventoryContainer.innerHTML = ''; return; }
+            emptyState.style.display = 'none';
+            inventoryContainer.innerHTML = [...window.gameState.inventory].reverse().map(item => {
+                const isSelected = window.gameState.selectedPets.includes(item.id);
+                const hasBonus = item.passiveValue > 0 || item.clickBonus > 0;
+                let buttonClass = 'py-1 px-3 rounded-lg text-sm font-semibold transition-colors';
+                let buttonText = 'Выбрать';
+                if (isSelected) { buttonClass += ' bg-red-600 hover:bg-red-500'; buttonText = 'Активен (Снять)'; } 
+                else if (hasBonus && window.gameState.selectedPets.length < getMaxSelectedPets()) { buttonClass += ' bg-green-600 hover:bg-green-500'; } 
+                else if (hasBonus) { buttonClass += ' bg-gray-600 cursor-not-allowed opacity-70'; buttonText = 'Лимит'; }
+                else { buttonClass += ' bg-gray-600 cursor-not-allowed opacity-50'; buttonText = 'Нет бонусов'; }
+                const sellButton = item.value > 0 ? `<button onclick="window.showSellConfirmation('${item.id}')" class="py-1 px-3 rounded-lg text-sm font-semibold transition-colors bg-gray-500 hover:bg-gray-400">Продать (${item.value.toFixed(2)})</button>` : '';
+                const passiveInfo = item.passiveValue > 0 ? `<p class="text-xs text-green-400 mt-1 font-bold">Доход: +${item.passiveValue.toFixed(2)}/с</p>` : '';
+                const clickInfo = item.clickBonus > 0 ? `<p class="text-xs text-blue-400 mt-1 font-bold">Клик: +${item.clickBonus.toFixed(2)}</p>` : '';
+                const noBonusInfo = !passiveInfo && !clickInfo ? `<p class="text-xs text-gray-500 mt-1">Не дает бонусов</p>` : '';
+                const secretClass = (item.rarity === "Секретный" || item.rarity === "Мега Секретный") ? 'inventory-item-secret' : '';
+                return `<div class="inventory-item p-4 bg-gray-700 rounded-xl flex items-center justify-between shadow-lg border-l-4 ${item.border.replace('border-', 'border-l-')} ${secretClass}"><div class="flex items-center flex-grow cursor-pointer" onclick="window.showPetPreview('${item.id}', 'inventory')">${getIconHtml(item, true)}<div class="flex-grow"><p class="text-lg font-bold ${item.color}">${item.name}</p><p class="text-sm text-gray-400">${item.rarity}</p>${passiveInfo}${clickInfo}${noBonusInfo}</div></div><div class="text-right flex-shrink-0 ml-4 flex flex-col space-y-2"><button onclick="window.togglePetSelection('${item.id}')" class="${buttonClass}" ${(!hasBonus || (!isSelected && window.gameState.selectedPets.length >= getMaxSelectedPets())) ? 'disabled' : ''}>${buttonText}</button>${sellButton}<p class="text-xs text-gray-500 mt-2">${new Date(item.date).toLocaleDateString('ru-RU')}</p></div></div>`;
+            }).join('');
+        }
+        function renderCasePreview(caseId) {
+            const previewContainer = document.getElementById('case-preview-container');
+            previewContainer.innerHTML = '';
+            const items = CASES[caseId].items.map(item => ({ ...item, probability: item.weight })).sort((a, b) => b.probability - a.probability); 
+            items.forEach(item => {
+                if (item.isMegaSecret) return; 
+                const displayName = item.isHiddenInPreview ? item.previewName : item.name;
+                const displayRarity = item.isHiddenInPreview ? "????" : item.rarity;
+                const displayColor = item.isHiddenInPreview ? "text-gray-400" : item.color;
+                previewContainer.innerHTML += `<div class="preview-grid-item border-2 ${item.border} flex items-center p-3 rounded-lg bg-gray-900 shadow-md cursor-pointer hover:bg-gray-800" onclick="window.showPetPreview('${item.name}', 'case')">${getIconHtml(item, false, false, true)}<div class="flex-grow"><p class="text-md font-bold ${displayColor} leading-tight">${displayName}</p><p class="text-xs text-gray-400">${displayRarity}</p></div><p class="text-sm font-semibold text-right text-gray-300 ml-2 whitespace-nowrap">${item.probability.toFixed(2)}%</p></div>`;
+            });
+        }
+
+        function getWeightedRandomItem(caseId) {
+            const caseData = CASES[caseId];
+            if (!caseData) return null;
+            let random = Math.random() * caseData.totalWeight; 
+            for (const item of caseData.items) { if (random < item.weight) return item; random -= item.weight; }
+            return caseData.items[0]; 
+        }
+        function generateReel(winningItem) {
+            const reel = document.getElementById('case-reel');
+            reel.innerHTML = '';
+            const items = Array.from({ length: 75 }, () => getWeightedRandomItem(currentCaseId));
+            items.push(winningItem); 
+            items.push(...Array.from({ length: 15 }, () => getWeightedRandomItem(currentCaseId)));
+            const itemWidthTotal = 98, itemWidth = 90; 
+            const stopOffset = (document.querySelector('.reel-viewport').clientWidth / 2) - (75 * itemWidthTotal + (itemWidth / 2));
+            items.forEach(item => {
+                let tileClass = `item-tile flex-shrink-0 flex flex-col items-center justify-center rounded-lg border-2 ${item.border}`;
+                if (item.isMegaSecret) tileClass += ' glow-mega-secret';
+                reel.innerHTML += `<div class="${tileClass}">${getIconHtml(item, false, true, true)}</div>`;
+            });
+            return stopOffset;
+        }
+        window.closeWinModal = function() { playNavClickSound(); document.getElementById('win-notification-modal').style.display = 'none'; window.showCaseDetails(currentCaseId, true); };
+        window.showWinModal = function(itemData) {
+            const newItem = { ...itemData, date: new Date().toISOString(), id: crypto.randomUUID() };
+            if (!window.gameState.foundPets.includes(newItem.name)) { window.gameState.foundPets.push(newItem.name); }
+            window.gameState.inventory.push(newItem);
+            savePaws(window.gameState.paws);
+            updatePawsDisplay();
+            showToast(`✅ ${newItem.name} добавлен в Инвентарь!`);
+            const modal = document.getElementById('win-notification-modal');
+            let borderClass = itemData.rarity === 'Секретный' ? 'border-rainbow' : (itemData.rarity === 'Мега Секретный' ? 'border-mega-secret-win' : itemData.border);
+            document.getElementById('win-icon-container').className = `w-24 h-24 mb-4 flex items-center justify-center rounded-xl bg-gray-900 border-4 ${borderClass} mx-auto overflow-hidden`; 
+            document.getElementById('win-icon-container').innerHTML = getIconHtml(itemData, false, true, false, true); 
+            document.getElementById('win-name').textContent = itemData.name;
+            document.getElementById('win-name').className = `text-xl font-extrabold mb-1 ${itemData.color}`;
+            document.getElementById('win-rarity').textContent = itemData.rarity; 
+            document.getElementById('win-rarity').className = `text-md mb-4 ${itemData.color}`;
+            document.getElementById('add-to-inventory-button').onclick = () => window.closeWinModal();
+            modal.style.display = 'flex';
+        };
+        
+        window.startCaseSpin = function() {
+            playMusic();
+            const caseData = CASES[currentCaseId];
+            if (!caseData) { return showToast("Ошибка: Данные кейса не найдены. Попробуйте перезайти."); }
+            if (!window.gameState.isDbReady) { return showToast("Подождите, игра еще загружается..."); }
+            if (window.gameState.paws < caseData.cost) { return showToast(`Не хватает ${caseData.cost.toFixed(2)} Лапок!`); }
+
+            window.gameState.paws -= caseData.cost;
+            savePaws(window.gameState.paws);
+            updatePawsDisplay();
+            const openButton = document.getElementById('open-case-button');
+            openButton.disabled = true;
+            openButton.textContent = 'Крутим...';
+            const winningItem = getWeightedRandomItem(currentCaseId);
+            const stopOffset = generateReel(winningItem);
+            const reel = document.getElementById('case-reel');
+            reel.style.transition = 'none';
+            reel.style.transform = 'translateX(0px)';
+
+            setTimeout(() => {
+                reel.style.transition = 'transform 5s cubic-bezier(0.2, 0.7, 0.4, 1)';
+                reel.style.transform = `translateX(${stopOffset}px)`;
+
+                const itemWidthTotal = 98;
+                let lastItemIndex = -1;
+                const viewportCenterOffset = document.querySelector('.reel-viewport')?.clientWidth / 2 || 0;
+                
+                const tickInterval = setInterval(() => {
+                    const reelEl = document.getElementById('case-reel');
+                    if (!reelEl) {
+                        clearInterval(tickInterval);
+                        return;
+                    }
+                    
+                    const style = window.getComputedStyle(reelEl);
+                    if (!style.transform || style.transform === 'none') return;
+                    
+                    try {
+                        const matrix = new DOMMatrix(style.transform);
+                        const currentX = Math.abs(matrix.m41);
+                        const centeredItemX = currentX + viewportCenterOffset;
+                        const currentItemIndex = Math.floor(centeredItemX / itemWidthTotal);
+
+                        if (currentItemIndex > lastItemIndex) {
+                            lastItemIndex = currentItemIndex;
+                            if (reelTickSynth && Tone.context.state === 'running') {
+                                reelTickSynth.triggerAttackRelease('C6', '8n');
+                            }
+                        }
+                    } catch (e) {
+                       // Failsafe for DOMMatrix parsing
+                    }
+                }, 65);
+
+                setTimeout(() => {
+                    clearInterval(tickInterval);
+                    openButton.disabled = false;
+                    window.showWinModal(winningItem);
+                }, 5050);
+
+            }, 50);
+        };
+
+        window.showCaseDetails = function(caseId, skipSectionChange = false) {
+            currentCaseId = caseId;
+            const caseData = CASES[caseId];
+            if (!caseData) return;
+            if (!skipSectionChange) playNavClickSound();
+            playMusic(); 
+            document.getElementById('case-details-title').textContent = caseData.name;
+            renderCasePreview(caseId);
+            const openButton = document.getElementById('open-case-button'); 
+            openButton.onclick = window.startCaseSpin;
+            const canAfford = window.gameState.paws >= caseData.cost;
+            openButton.classList.remove('bg-red-500', 'hover:bg-red-400', 'bg-blue-500', 'hover:bg-blue-400', 'opacity-50', 'cursor-not-allowed');
+            const costText = `${caseData.cost.toFixed(2)} Лапок`;
+            if (canAfford) {
+                openButton.textContent = `Открыть Кейс (${costText})`;
+                openButton.classList.add('bg-blue-500', 'hover:bg-blue-400');
+                openButton.disabled = false;
+            } else {
+                openButton.textContent = `Недостаточно Лапок (${costText})`;
+                openButton.classList.add('bg-red-500', 'hover:bg-red-400', 'opacity-70', 'cursor-not-allowed');
+                openButton.disabled = true;
+            }
+            if (!skipSectionChange) {
+                window.setupNavigation().showSection('case-details');
+                const reel = document.getElementById('case-reel');
+                reel.style.transition = 'none';
+                generateReel(caseData.items[0]); 
+                reel.style.transform = 'translateX(0px)';
+            }
+        };
+
+        function managePassiveLoop() {
+            if (!window.gameState.isDbReady || document.hidden) { if (passiveIntervalId !== null) { clearInterval(passiveIntervalId); passiveIntervalId = null; } return; }
+            if (passiveIntervalId === null) { passiveIntervalId = setInterval(() => { if (window.gameState.passiveRate > 0) { window.gameState.paws += window.gameState.passiveRate; updatePawsDisplay(); savePaws(window.gameState.paws); } }, PASSIVE_TICK_RATE); }
+        }
+        function handleVisibilityChange() { 
+            managePassiveLoop();
+            if (!wakeLock && document.visibilityState === 'visible') {
+                requestWakeLock();
+            }
+        }
+        
+        function performPawsClick() {
+            if (!window.gameState.isDbReady) return;
+            window.gameState.paws += calculateClickValue();
+            updatePawsDisplay();
+            savePaws(window.gameState.paws);
+            const clickButton = document.getElementById('click-button');
+            clickButton.classList.add('scale-95');
+            setTimeout(() => { clickButton.classList.remove('scale-95'); }, 100);
+            playMusic(); 
+        }
+        function setupClickListener() {
+            const clickButton = document.getElementById('click-button');
+            clickButton.addEventListener('touchstart', e => { e.preventDefault(); performPawsClick(); if (e.touches.length >= 2) performPawsClick(); }, { passive: false });
+            clickButton.addEventListener('click', () => { performPawsClick(); });
+        }
+        
+        function setupResetConfirmationListener() {
+            const input = document.getElementById('reset-confirm-input');
+            const confirmBtn = document.getElementById('reset-confirm-button');
+            const requiredText = 'удалить данные';
+
+            input.addEventListener('input', () => {
+                if (input.value.trim() === requiredText) {
+                    confirmBtn.disabled = false;
+                    confirmBtn.classList.remove('bg-red-800', 'text-gray-500', 'cursor-not-allowed');
+                    confirmBtn.classList.add('bg-red-600', 'hover:bg-red-500');
+                } else {
+                    confirmBtn.disabled = true;
+                    confirmBtn.classList.add('bg-red-800', 'text-gray-500', 'cursor-not-allowed');
+                    confirmBtn.classList.remove('bg-red-600', 'hover:bg-red-500');
+                }
+            });
+        }
+
+        window.showPetPreview = function(identifier, source) {
+            playNavClickSound();
+            let petData;
+            const isInventoryItem = source === 'inventory';
+
+            if (isInventoryItem) {
+                petData = window.gameState.inventory.find(p => p.id === identifier);
+            } else { // source === 'case'
+                petData = ALL_PETS.find(p => p.name === identifier);
+            }
+
+            if (!petData) { return showToast("Ошибка: Питомец не найден."); }
+
+            const modal = document.getElementById('pet-preview-modal');
+            const modalContent = document.getElementById('pet-preview-content');
+            const img = document.getElementById('pet-preview-image');
+            const nameEl = document.getElementById('pet-preview-name');
+            const rarityEl = document.getElementById('pet-preview-rarity');
+            const buttonsContainer = document.getElementById('pet-preview-buttons');
+            
+            const isHidden = !isInventoryItem && petData.isHiddenInPreview;
+
+            if (isHidden) {
+                img.src = petData.previewIcon;
+                img.alt = "Секретный питомец";
+                nameEl.textContent = petData.previewName || "?????";
+                nameEl.className = "text-3xl font-extrabold mb-1 text-gray-400";
+                rarityEl.textContent = "???";
+                rarityEl.className = "text-lg mb-6 text-gray-400";
+                modalContent.className = 'p-8 rounded-2xl text-center w-full max-w-sm transition-all bg-gray-800';
+            } else {
+                img.src = petData.icon;
+                img.alt = petData.name;
+                nameEl.textContent = petData.name;
+                nameEl.className = `text-3xl font-extrabold mb-1 ${petData.color}`;
+                rarityEl.textContent = petData.rarity;
+                rarityEl.className = `text-lg mb-6 ${petData.color}`;
+
+                modalContent.className = 'p-8 rounded-2xl text-center w-full max-w-sm transition-all'; // Reset
+                if (petData.rarity === 'Секретный') {
+                    modalContent.classList.add('modal-secret-glow', 'bg-gray-900');
+                } else if (petData.rarity === 'Мега Секретный') {
+                    modalContent.classList.add('modal-mega-secret-glow', 'bg-gray-900');
+                } else {
+                    modalContent.classList.add('bg-gray-800');
+                }
+            }
+
+            buttonsContainer.innerHTML = '';
+            if (isInventoryItem) {
+                const isSelected = window.gameState.selectedPets.includes(petData.id);
+                const hasBonus = petData.passiveValue > 0 || petData.clickBonus > 0;
+                
+                let selectButtonClass = 'flex-1 py-3 font-bold rounded-xl transition-colors ';
+                let selectButtonText = 'Выбрать';
+                let selectButtonDisabled = false;
+
+                if (isSelected) {
+                    selectButtonClass += 'bg-red-600 hover:bg-red-500 text-white';
+                    selectButtonText = 'Убрать';
+                } else if (hasBonus && window.gameState.selectedPets.length < getMaxSelectedPets()) {
+                    selectButtonClass += 'bg-green-600 hover:bg-green-500 text-white';
+                } else if (hasBonus) {
+                    selectButtonClass += 'bg-gray-600 text-gray-400 cursor-not-allowed';
+                    selectButtonText = 'Лимит';
+                    selectButtonDisabled = true;
+                } else {
+                    selectButtonClass += 'bg-gray-600 text-gray-400 cursor-not-allowed';
+                    selectButtonText = 'Нет бонусов';
+                    selectButtonDisabled = true;
+                }
+
+                buttonsContainer.innerHTML += `<button onclick="window.togglePetSelection('${petData.id}')" class="${selectButtonClass}" ${selectButtonDisabled ? 'disabled' : ''}>${selectButtonText}</button>`;
+                buttonsContainer.innerHTML += `<button onclick="window.showSellConfirmation('${petData.id}')" class="flex-1 py-3 bg-yellow-600 hover:bg-yellow-500 text-white font-bold rounded-xl transition-colors">Продать</button>`;
+            }
+
+            modal.style.display = 'flex';
+        }
+        window.closePetPreview = function() {
+            playNavClickSound();
+            document.getElementById('pet-preview-modal').style.display = 'none';
+        }
+
+        // --- Логика Коллекции ---
+        window.showCollectionModal = function() { playNavClickSound(); renderCollection(); document.getElementById('collection-modal').style.display = 'flex'; };
+        window.closeCollectionModal = function() { playNavClickSound(); document.getElementById('collection-modal').style.display = 'none'; };
+        window.claimCollectionReward = function() {
+            playNavClickSound();
+            if (window.gameState.foundPets.length < ALL_PETS.length) return showToast("Вы еще не собрали всех питомцев!");
+            if (window.gameState.isCollectionRewardClaimed) return showToast("Награда уже была получена.");
+            window.gameState.paws += COLLECTION_REWARD;
+            window.gameState.isCollectionRewardClaimed = true;
+            savePaws(window.gameState.paws);
+            updatePawsDisplay();
+            renderCollection();
+            showToast(`🎉 Вы получили ${COLLECTION_REWARD} Лапок за полную коллекцию!`);
+        };
+        function renderCollection() {
+            const grid = document.getElementById('collection-grid');
+            const counter = document.getElementById('collection-counter');
+            const rewardButton = document.getElementById('collection-reward-button');
+            const foundCount = window.gameState.foundPets.length;
+            const totalCount = ALL_PETS.length;
+            counter.textContent = `Найдено: ${foundCount} / ${totalCount}`;
+            grid.innerHTML = '';
+            ALL_PETS.forEach(pet => {
+                const isFound = window.gameState.foundPets.includes(pet.name);
+                let html;
+                if (isFound) {
+                    html = `<div class="relative flex flex-col items-center justify-center p-2 rounded-lg bg-gray-700 border-2 ${pet.border}"><img src="${pet.icon}" alt="${pet.name}" class="w-16 h-16 object-cover rounded-md" onerror="this.onerror=null;this.src='https://placehold.co/60x60/374151/fff?text=?';"><p class="mt-2 text-xs font-bold ${pet.color} text-center truncate w-full">${pet.name}</p><p class="text-xs ${pet.color} opacity-70 text-center">${pet.rarity}</p></div>`;
+                } else {
+                    html = `<div class="flex items-center justify-center p-2 rounded-lg bg-gray-900 aspect-square"><i class="fas fa-question text-4xl text-gray-700"></i></div>`;
+                }
+                grid.innerHTML += html;
+            });
+            const allFound = foundCount >= totalCount;
+            const rewardClaimed = window.gameState.isCollectionRewardClaimed;
+            rewardButton.className = 'w-full py-3 font-bold rounded-xl transition-all shadow-lg text-lg'; // Reset classes
+            if (rewardClaimed) {
+                rewardButton.disabled = true;
+                rewardButton.textContent = 'Награда получена';
+                rewardButton.classList.add('bg-green-700', 'text-gray-300', 'cursor-not-allowed');
+            } else if (allFound) {
+                rewardButton.disabled = false;
+                rewardButton.textContent = `Забрать ${COLLECTION_REWARD.toLocaleString('ru-RU')} Лапок`;
+                rewardButton.classList.add('bg-yellow-500', 'hover:bg-yellow-400', 'text-gray-900');
+            } else {
+                rewardButton.disabled = true;
+                rewardButton.textContent = 'Соберите всех питомцев';
+                rewardButton.classList.add('bg-gray-600', 'text-gray-400', 'cursor-not-allowed');
+            }
+        }
+
+        function setupUpdatesContent() {
+            document.getElementById('updates-title-version').textContent = `(v${CURRENT_UPDATE_VERSION})`;
+            document.getElementById('updates-list-version').textContent = `Обновление v${CURRENT_UPDATE_VERSION} (Текущее)`;
+        }
+        window.checkAndShowUpdatesScreen = function(force = false) {
+            const updatesModal = document.getElementById('updates-modal');
+            if (force) { playNavClickSound(); updatesModal.style.display = 'flex'; return; }
+            if (localStorage.getItem('lastShownUpdateVersion') !== CURRENT_UPDATE_VERSION) { updatesModal.style.display = 'flex'; }
+        }
+        window.closeUpdatesScreen = function() {
+            document.getElementById('updates-modal').style.display = 'none'; 
+            if (localStorage.getItem('lastShownUpdateVersion') !== CURRENT_UPDATE_VERSION) { localStorage.setItem('lastShownUpdateVersion', CURRENT_UPDATE_VERSION); }
+        };
+
+        async function initGame() {
+            updateAppState(false); 
+            window.gameState.paws = loadPaws();
+            migrateInventory(); 
+            window.gameState.isDbReady = true;
+            updatePawsDisplay();
+            updateAppState(true); 
+            document.addEventListener('visibilitychange', handleVisibilityChange);
+            managePassiveLoop(); 
+            window.setupNavigation();
+            setupUpdatesContent(); 
+            setupClickListener(); 
+            setupResetConfirmationListener();
+            requestWakeLock();
+            window.checkAndShowUpdatesScreen(); 
+        }
+        
+        window.setupNavigation = function() {
+            const navItems = document.querySelectorAll('.nav-item');
+            const sections = { 'nav-home': document.getElementById('home-section'), 'nav-inventory': document.getElementById('inventory-section'), 'nav-cases': document.getElementById('cases-section'), 'nav-settings': document.getElementById('settings-section'), 'case-details': document.getElementById('case-details-section'), };
+            function showSection(sectionId) {
+                Object.values(sections).forEach(s => { s.style.display = 'none'; });
+                if (sections[sectionId]) sections[sectionId].style.display = (sectionId === 'nav-home' || sectionId === 'case-details') ? 'flex' : 'block';
+                navItems.forEach(n => n.classList.remove('active'));
+                document.getElementById(sectionId.startsWith('nav-') ? sectionId : 'nav-cases')?.classList.add('active');
+                if (sectionId === 'nav-inventory') renderInventory();
+            }
+            navItems.forEach(item => {
+                item.addEventListener('touchstart', e => { e.preventDefault(); e.stopPropagation(); playNavClickSound(); showSection(item.id); });
+                item.addEventListener('click', () => { playNavClickSound(); showSection(item.id); });
+            });
+            window.closeCaseDetails = function() { playNavClickSound(); showSection('nav-cases'); }
+            return { showSection };
+        }
+        
+        window.onload = initGame;
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #1a202c; color: #e2e8f0; margin: 0; padding: 0; display: flex; flex-direction: column; min-height: 10vh; }
+        .content-area { flex-grow: 1; padding: 20px; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; overflow-y: auto; padding-bottom: 80px; padding-top: 80px; }
+        #case-details-section, #inventory-section, #cases-section, #settings-section { width: 100%; height: 100%; max-width: 100%; padding: 0; flex-grow: 1; }
+        #case-details-section > div { height: calc(100vh - 140px); border-radius: 0; margin: 0; }
+        .bottom-nav { position: fixed; bottom: 0; left: 0; width: 100%; background-color: #2d3748; border-top: 1px solid #4a5568; display: flex; justify-content: space-around; align-items: center; height: 60px; padding-bottom: env(safe-area-inset-bottom); z-index: 100; }
+        .nav-item { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #a0aec0; font-size: 0.75rem; transition: color 0.2s; cursor: pointer; user-select: none; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+        .nav-item.active { color: #63b3ed; }
+        .nav-item i { font-size: 1.5rem; margin-bottom: 2px; flex-shrink: 0; }
+        #click-button { touch-action: manipulation; }
+        .case-card { background-color: #2d3748; padding: 16px; border-radius: 1rem; text-align: center; transition: transform 0.1s; display: flex; flex-direction: column; align-items: center; box-shadow: 0 0 10px rgba(0,0,0,0.5); width: 100%; max-width: 200px; border: none; cursor: pointer; }
+        .case-card:active { transform: scale(0.98); }
+        .border-gray-400 { border-color: #9ca3af !important; } 
+        .border-blue-500 { border-color: #3b82f6 !important; } 
+        .border-green-400 { border-color: #4ade80 !important; } 
+        .border-purple-600 { border-color: #9333ea !important; } 
+        .border-yellow-400 { border-color: #facc15 !important; } 
+        .border-red-500 { border-color: #ef4444 !important; } 
+        @keyframes rainbow-border { 0%, 100% { border-color: #facc15; box-shadow: 0 0 15px #facc15; } 25% { border-color: #ef4444; box-shadow: 0 0 15px #ef4444; } 50% { border-color: #3b82f6; box-shadow: 0 0 15px #3b82f6; } 75% { border-color: #4ade80; box-shadow: 0 0 15px #4ade80; } }
+        .border-rainbow { border-style: solid !important; border-width: 2px !important; animation: rainbow-border 3s infinite alternate; }
+        @keyframes mega-secret-glow { 0%, 100% { box-shadow: 0 0 20px rgba(255, 223, 0, 0.5); } 50% { box-shadow: 0 0 30px rgba(255, 165, 0, 1.0); } }
+        .border-mega-secret { border-color: #ffdf00 !important; border-width: 4px !important; animation: mega-secret-glow 2s infinite alternate; }
+        @keyframes rainbow-bg { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+        .glow-mega-secret { 
+            background: linear-gradient(45deg, #ffdf00, #ff00c8, #7a00ff, #002bff, #00ffd5, #48ff00, #fffb00, #ff7300);
+            background-size: 400% 400%;
+            animation: rainbow-bg 3s ease infinite, mega-secret-glow 1s infinite alternate;
+            border-color: #ffdf00 !important;
+        }
+        .border-mega-secret-win { border-color: #ffdf00 !important; border-width: 4px !important; animation: mega-secret-glow 1.5s infinite alternate; box-shadow: 0 0 40px rgba(255, 165, 0, 0.8); }
+        .reel-viewport { height: 100px; padding-top: 5px; overflow-x: hidden; }
+        .case-reel { display:flex; gap: 8px; }
+        .item-tile { width: 90px; height: 90px; padding: 2px; background-color: #1f2937; border-radius: 8px; box-shadow: inset 0 0 8px rgba(0,0,0,0.7); overflow: hidden; }
+        .reel-indicator { position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 6px; height: 100%; background-color: #f59e0b; box-shadow: 0 0 15px #f59e0b; z-index: 20; border-radius: 3px; }
+        .preview-grid-item { border-left: 6px solid; }
+        @media (max-width: 640px) { .content-area { padding: 10px; padding-top: 70px; padding-bottom: 70px; } #home-section, #inventory-section, #cases-section, #settings-section, #case-details-section { padding-top: 20px; } }
+        
+        /* НОВЫЕ СТИЛИ ДЛЯ ПРЕДПРОСМОТРА И ИНВЕНТАРЯ */
+        @keyframes rainbow-border-left { 0%, 100% { border-left-color: #facc15; } 25% { border-left-color: #ef4444; } 50% { border-left-color: #3b82f6; } 75% { border-left-color: #4ade80; } }
+        .inventory-item-secret { animation: rainbow-border-left 3s infinite alternate; }
+        @keyframes rainbow-glow { 0%, 100% { box-shadow: 0 0 25px #facc15, inset 0 0 10px #facc1533; } 25% { box-shadow: 0 0 25px #ef4444, inset 0 0 10px #ef444433; } 50% { box-shadow: 0 0 25px #3b82f6, inset 0 0 10px #3b82f633; } 75% { box-shadow: 0 0 25px #4ade80, inset 0 0 10px #4ade8033; } }
+        .modal-secret-glow { border: 2px solid #fff; animation: rainbow-glow 3s infinite alternate; }
+        @keyframes mega-secret-modal-glow { 0%, 100% { box-shadow: 0 0 30px #ffdf00, inset 0 0 15px #ffdf0044; border-color: #ffdf00; } 50% { box-shadow: 0 0 40px #ffA500, inset 0 0 20px #ffA50055; border-color: #ffA500; } }
+        .modal-mega-secret-glow { border: 2px solid; animation: mega-secret-modal-glow 2s infinite alternate; }
+    </style>
+</head>
+<body class="bg-gray-900 min-h-screen">
+    <audio id="backgroundMusic" loop src="https://files.catbox.moe/b1gm68.mp3"></audio>
+
+    <header class="header fixed top-0 left-0 w-full bg-gray-800 p-3 shadow-lg z-50 flex justify-between items-center h-16">
+        <div class="text-white text-xl font-black tracking-wider">Pet Farm</div>
+        <div class="flex flex-col items-end">
+            <p id="paws-display" class="text-lg font-extrabold text-orange-400">Лапки: 0.00</p>
+            <p id="user-id-display" class="text-xs text-gray-400 mt-0">Локальное хранилище</p>
+        </div>
+    </header>
+
+    <main class="content-area w-full max-w-4xl mx-auto">
+        <section id="home-section" class="flex-col items-center justify-center space-y-8 w-full h-full" style="display: flex;">
+            <div class="text-center">
+                <h1 class="text-4xl font-black text-white">Кликай, чтобы заработать!</h1>
+                <p id="click-message" class="text-md text-gray-400 mt-2">Жми на кнопку (мышью или пальцем)</p>
+                <p id="click-power-display" class="text-md text-blue-400 font-bold mt-1">Сила клика: 0.09</p>
+                <p id="passive-rate-display" class="text-md text-green-400 font-bold mt-1">Авто: +0.00 / с</p>
+                <p id="loading-message" class="text-md text-red-400 mt-2" style="display: none;">Загрузка данных...</p>
+            </div>
+            <button id="click-button" class="w-48 h-48 rounded-full bg-orange-500 text-white text-3xl font-bold transition-all duration-100 ease-out shadow-2xl hover:shadow-orange-500/50 hover:bg-orange-400 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">
+                <i class="fas fa-paw"></i>
+            </button>
+        </section>
+
+        <section id="inventory-section" class="w-full" style="display: none;">
+            <div class="flex justify-between items-center mb-6 border-b border-gray-700 pb-2">
+                <h2 class="text-3xl font-bold text-white">Мой Инвентарь</h2>
+                <button onclick="window.showUpgradesModal()" class="px-4 py-2 bg-yellow-600 hover:bg-yellow-500 text-white font-bold rounded-xl transition-all shadow-md text-sm sm:text-base">
+                    <i class="fas fa-arrow-up mr-1"></i> Улучшения
+                </button>
+            </div>
+            <div class="bg-gray-800 p-4 rounded-xl mb-4 flex justify-between items-center border-l-4 border-blue-500 shadow-lg">
+                <p class="text-lg font-semibold text-white">Активные Питомцы</p>
+                <p id="active-pets-count" class="text-lg font-bold text-blue-400">Активных: 0 / 3</p>
+            </div>
+            <button onclick="window.equipBestPets()" class="w-full py-3 mb-4 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-xl transition-all shadow-lg hover:shadow-purple-600/50">
+                <i class="fas fa-magic mr-2"></i> Одеть Лучших
+            </button>
+            <button onclick="window.showCollectionModal()" class="w-full py-3 mb-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition-all shadow-lg hover:shadow-blue-600/50">
+                <i class="fas fa-book mr-2"></i> Коллекция
+            </button>
+            <div id="inventory-container" class="space-y-4"></div>
+            <div id="inventory-empty-state" class="flex flex-col items-center justify-center p-8 bg-gray-800 rounded-xl mt-4 border-2 border-dashed border-gray-700" style="display: flex;">
+                <i class="fas fa-box-open text-6xl text-gray-600 mb-4"></i>
+                <p class="text-xl font-semibold text-gray-400">Инвентарь пуст!</p>
+                <p class="text-sm text-gray-500 mt-2">Открой кейсы, чтобы найти животных.</p>
+            </div>
+        </section>
+
+        <section id="cases-section" class="w-full" style="display: none;">
+            <h2 class="text-3xl font-bold text-white mb-6 border-b border-gray-700 pb-2">Магазин Кейсов</h2>
+            <div class="grid grid-cols-2 gap-6 sm:grid-cols-3 md:grid-cols-4">
+                <div class="case-card" onclick="window.showCaseDetails('farmer')">
+                    <img src="https://files.catbox.moe/teasjx.png" alt="Farmer Case" class="w-28 h-28 object-cover mx-auto mb-3 bg-gray-600 rounded-lg p-1 border-4 border-green-500">
+                    <p class="text-xl font-extrabold text-white">Фермерский Кейс</p>
+                    <p class="text-xs text-gray-400 mt-1">Животные со всей фермы!</p>
+                    <p class="text-lg font-bold text-green-400 mt-2">100.00 Лапок</p>
+                </div>
+                <div class="case-card" onclick="window.showCaseDetails('jungle')">
+                    <img src="https://files.catbox.moe/adaf91.jpg" alt="Jungle Case" class="w-28 h-28 object-cover mx-auto mb-3 bg-gray-600 rounded-lg p-1 border-4 border-yellow-500">
+                    <p class="text-xl font-extrabold text-white">Джунглийский Кейс</p>
+                    <p class="text-xs text-gray-400 mt-1">Экзотические животные!</p>
+                    <p class="text-lg font-bold text-green-400 mt-2">2000.00 Лапок</p>
+                </div>
+            </div>
+        </section>
+
+        <section id="case-details-section" class="w-full flex-col" style="display: none;">
+            <div class="bg-gray-800 p-4 sm:p-8 rounded-xl w-full mx-auto flex-grow overflow-auto">
+                <button onclick="window.closeCaseDetails()" class="text-gray-400 hover:text-white mb-4 flex items-center"><i class="fas fa-arrow-left mr-2"></i> Вернуться к Кейсам</button>
+                <h2 id="case-details-title" class="text-4xl font-black text-white mb-6"></h2>
+                <div class="relative bg-gray-900 rounded-xl p-2 mb-6 border-4 border-gray-700 reel-viewport">
+                    <div class="reel-indicator"></div>
+                    <div id="case-reel" class="case-reel w-max items-center h-full"></div>
+                </div>
+                <button id="open-case-button" class="w-full py-4 text-xl font-extrabold text-white rounded-xl transition-all shadow-lg disabled:opacity-70 disabled:cursor-not-allowed"></button>
+                <h3 class="text-2xl font-bold text-white mt-8 mb-4">Шансы Выпадения</h3>
+                <div id="case-preview-container" class="grid grid-cols-1 sm:grid-cols-2 gap-4"></div>
+            </div>
+        </section>
+        
+         <section id="settings-section" class="w-full" style="display: none;">
+            <h2 class="text-3xl font-bold text-white mb-6 border-b border-gray-700 pb-2">Настройки</h2>
+            <div class="bg-gray-800 p-6 rounded-xl space-y-4 shadow-xl">
+                <p class="text-lg font-semibold text-white">Информация</p>
+                <button onclick="window.checkAndShowUpdatesScreen(true)" class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-lg"><i class="fas fa-list-ul mr-2"></i> История Обновлений</button>
+            </div>
+            <div class="bg-gray-800 p-6 rounded-xl space-y-4 shadow-xl mt-4">
+                <p class="text-lg font-semibold text-white">Данные игры</p>
+                <button onclick="window.showResetConfirmation()" class="w-full px-4 py-2 bg-red-600 hover:bg-red-500 text-white font-semibold rounded-lg">Сбросить Прогресс</button>
+            </div>
+        </section>
+    </main>
+
+    <nav class="bottom-nav">
+        <div id="nav-home" class="nav-item active"><i class="fas fa-home"></i><span>Главная</span></div>
+        <div id="nav-cases" class="nav-item"><i class="fas fa-box"></i><span>Кейсы</span></div>
+        <div id="nav-inventory" class="nav-item"><i class="fas fa-boxes"></i><span>Инвентарь</span></div>
+        <div id="nav-settings" class="nav-item"><i class="fas fa-cog"></i><span>Настройки</span></div>
+    </nav>
+    
+    <!-- Modals -->
+    <div id="notification-modal" class="fixed bottom-20 left-1/2 transform -translate-x-1/2 p-3 bg-gray-700 text-white rounded-lg shadow-2xl z-[500]" style="display: none;"><p id="notification-text" class="text-sm font-semibold"></p></div>
+    <div id="win-notification-modal" class="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-[600]" style="display: none;"><div class="bg-gray-800 p-8 rounded-2xl text-center shadow-[0_0_50px_rgba(255,255,255,0.1)] w-full max-w-sm"><p class="text-3xl font-extrabold text-white mb-4">Новый Питомец!</p><div id="win-icon-container" class="w-24 h-24 mb-4 flex items-center justify-center rounded-xl bg-gray-900 border-4 mx-auto overflow-hidden"></div><h3 id="win-name" class="text-xl font-extrabold mb-1"></h3><p id="win-rarity" class="text-md mb-6"></p><button id="add-to-inventory-button" class="w-full py-3 bg-green-600 hover:bg-green-500 text-white font-bold rounded-xl">Продолжить</button></div></div>
+    <div id="updates-modal" class="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-[700]" style="display: none;"><div class="bg-gray-900 p-8 rounded-2xl text-center shadow-2xl w-full max-w-md border-t-4 border-blue-500"><h2 class="text-3xl font-extrabold text-blue-400 mb-4 flex flex-wrap items-center justify-center"><i class="fas fa-bolt mr-3"></i> Нововведения <span id="updates-title-version" class="break-words ml-1"></span></h2><p class="text-lg text-gray-300 mb-6">Привет! Мы обновили игру.</p><div class="bg-gray-800 p-4 rounded-lg border border-gray-700 text-left overflow-y-auto max-h-48">
+        <ul class="list-disc list-inside space-y-2 text-gray-300">
+            <li class="font-bold text-yellow-300" id="updates-list-version"></li>
+            <li><span class="text-green-400 font-semibold">НОВЫЙ ЗВУК:</span> Добавлен звуковой эффект прокрутки кейса!</li>
+            <li><span class="text-purple-400 font-semibold">ИСПРАВЛЕНИЕ:</span> Кейсы больше не начинают крутиться сами по себе при открытии.</li>
+        </ul>
+    </div><button onclick="window.closeUpdatesScreen()" class="w-full py-3 bg-blue-500 hover:bg-blue-400 text-white font-bold rounded-xl mt-6">Начать играть!</button></div></div>
+    <div id="reset-confirm-modal" class="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-[800] p-4" style="display: none;"><div class="bg-gray-800 p-8 rounded-2xl text-center shadow-2xl w-full max-w-sm border-t-4 border-red-500"><h3 class="text-2xl font-extrabold text-red-400 mb-4">Подтверждение Сброса</h3><p class="text-md text-gray-300 mb-4">Это действие **нельзя отменить**. Чтобы подтвердить, введите <code class="bg-gray-900 text-red-400 font-mono p-1 rounded">удалить данные</code> в поле ниже.</p><input id="reset-confirm-input" type="text" class="w-full bg-gray-900 border border-gray-700 rounded-lg p-2 text-center text-white mb-4 focus:outline-none focus:ring-2 focus:ring-red-500" placeholder="удалить данные"><div class="flex space-x-4"><button onclick="window.closeResetConfirmation()" class="flex-1 py-3 bg-gray-600 hover:bg-gray-500 text-white font-bold rounded-xl">Отмена</button><button id="reset-confirm-button" onclick="window.performReset()" class="flex-1 py-3 bg-red-800 text-gray-500 font-bold rounded-xl cursor-not-allowed" disabled>Сбросить</button></div></div></div>
+    <div id="sell-confirm-modal" class="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-[1100]" style="display: none;"><div class="bg-gray-800 p-8 rounded-2xl text-center shadow-2xl w-full max-w-sm border-t-4 border-yellow-500"><h3 class="text-2xl font-extrabold text-white mb-4">Подтверждение Продажи</h3><p class="text-md text-gray-300 mb-6">Продать **<span id="sell-pet-name" class="text-yellow-400 font-bold"></span>** за <span id="sell-pet-price" class="text-green-400 font-bold">0.00</span> Лапок?</p><div class="flex space-x-4"><button onclick="document.getElementById('sell-confirm-modal').style.display='none'; window.playNavClickSound();" class="flex-1 py-3 bg-gray-600 hover:bg-gray-500 text-white font-bold rounded-xl">Отмена</button><button id="sell-confirm-button" onclick="window.performSell()" class="flex-1 py-3 bg-green-600 hover:bg-green-500 text-white font-bold rounded-xl">Продать</button></div></div></div>
+    <div id="upgrades-modal" class="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-[800] p-4" style="display: none;"><div class="bg-gray-800 p-6 rounded-2xl shadow-2xl w-full max-w-lg border-t-4 border-yellow-500 mx-auto max-h-[90vh] flex flex-col"><div class="flex justify-between items-center mb-4"><h3 class="text-2xl font-extrabold text-white">Улучшения</h3><button onclick="window.closeUpgradesModal()" class="text-gray-400 hover:text-white"><i class="fas fa-times text-2xl"></i></button></div><p class="text-md text-gray-400 mb-6 border-b border-gray-700 pb-3">Покупайте улучшения, чтобы стать сильнее!</p><div id="upgrades-list-container" class="space-y-4 overflow-y-auto pr-2"></div></div></div>
+    <div id="collection-modal" class="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-[900] p-4" style="display: none;"><div class="bg-gray-800 p-6 rounded-2xl shadow-2xl w-full max-w-4xl border-t-4 border-purple-500 mx-auto max-h-[90vh] flex flex-col"><div class="flex justify-between items-center mb-4 flex-shrink-0"><div><h3 class="text-2xl font-extrabold text-white">Коллекция Питомцев</h3><p id="collection-counter" class="text-sm text-gray-400">Найдено: 0 / 0</p></div><button onclick="window.closeCollectionModal()" class="text-gray-400 hover:text-white transition-colors"><i class="fas fa-times text-2xl"></i></button></div><div id="collection-grid" class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-4 overflow-y-auto p-2 bg-gray-900 rounded-lg flex-grow"></div><div class="mt-4 flex-shrink-0"><button id="collection-reward-button" onclick="window.claimCollectionReward()" class="w-full py-3 font-bold rounded-xl transition-all shadow-lg text-lg" disabled>Забрать 22 222 Лапок</button></div></div></div>
+    
+    <!-- НОВОЕ МОДАЛЬНОЕ ОКНО: ПРЕДПРОСМОТР ПИТОМЦА -->
+    <div id="pet-preview-modal" class="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-[1000] p-4" style="display: none;" onclick="window.closePetPreview()">
+        <div id="pet-preview-content" class="p-8 rounded-2xl text-center w-full max-w-sm transition-all" onclick="event.stopPropagation()">
+            <img id="pet-preview-image" src="" alt="" class="w-32 h-32 object-cover mx-auto mb-4 rounded-xl bg-gray-700 border-4 border-gray-500">
+            <h3 id="pet-preview-name" class="text-3xl font-extrabold mb-1"></h3>
+            <p id="pet-preview-rarity" class="text-lg mb-6"></p>
+            <div id="pet-preview-buttons" class="flex space-x-4">
+                <!-- Кнопки будут добавлены динамически -->
+            </div>
+             <button onclick="window.closePetPreview()" class="w-full mt-4 py-2 bg-gray-600 hover:bg-gray-500 text-white font-bold rounded-xl">Закрыть</button>
+        </div>
+    </div>
+
+</body>
+</html>
+
