@@ -915,7 +915,6 @@
         <div id="nav-settings" class="nav-item"><i class="fas fa-cog"></i><span>Настройки</span></div>
     </nav>
     
-    <!-- Modals -->
     <div id="notification-modal" class="fixed bottom-20 left-1/2 transform -translate-x-1/2 p-3 bg-gray-700 text-white rounded-lg shadow-2xl z-[500]" style="display: none;"><p id="notification-text" class="text-sm font-semibold"></p></div>
     <div id="win-notification-modal" class="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-[600]" style="display: none;"><div class="bg-gray-800 p-8 rounded-2xl text-center shadow-[0_0_50px_rgba(255,255,255,0.1)] w-full max-w-sm"><p class="text-3xl font-extrabold text-white mb-4">Новый Питомец!</p><div id="win-icon-container" class="w-24 h-24 mb-4 flex items-center justify-center rounded-xl bg-gray-900 border-4 mx-auto overflow-hidden"></div><h3 id="win-name" class="text-xl font-extrabold mb-1"></h3><p id="win-rarity" class="text-md mb-6"></p><button id="add-to-inventory-button" class="w-full py-3 bg-green-600 hover:bg-green-500 text-white font-bold rounded-xl">Продолжить</button></div></div>
     <div id="updates-modal" class="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-[700]" style="display: none;"><div class="bg-gray-900 p-8 rounded-2xl text-center shadow-2xl w-full max-w-md border-t-4 border-blue-500"><h2 class="text-3xl font-extrabold text-blue-400 mb-4 flex flex-wrap items-center justify-center"><i class="fas fa-bolt mr-3"></i> Нововведения <span id="updates-title-version" class="break-words ml-1"></span></h2><p class="text-lg text-gray-300 mb-6">Привет! Мы обновили игру.</p><div class="bg-gray-800 p-4 rounded-lg border border-gray-700 text-left overflow-y-auto max-h-48">
@@ -930,15 +929,13 @@
     <div id="upgrades-modal" class="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-[800] p-4" style="display: none;"><div class="bg-gray-800 p-6 rounded-2xl shadow-2xl w-full max-w-lg border-t-4 border-yellow-500 mx-auto max-h-[90vh] flex flex-col"><div class="flex justify-between items-center mb-4"><h3 class="text-2xl font-extrabold text-white">Улучшения</h3><button onclick="window.closeUpgradesModal()" class="text-gray-400 hover:text-white"><i class="fas fa-times text-2xl"></i></button></div><p class="text-md text-gray-400 mb-6 border-b border-gray-700 pb-3">Покупайте улучшения, чтобы стать сильнее!</p><div id="upgrades-list-container" class="space-y-4 overflow-y-auto pr-2"></div></div></div>
     <div id="collection-modal" class="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-[900] p-4" style="display: none;"><div class="bg-gray-800 p-6 rounded-2xl shadow-2xl w-full max-w-4xl border-t-4 border-purple-500 mx-auto max-h-[90vh] flex flex-col"><div class="flex justify-between items-center mb-4 flex-shrink-0"><div><h3 class="text-2xl font-extrabold text-white">Коллекция Питомцев</h3><p id="collection-counter" class="text-sm text-gray-400">Найдено: 0 / 0</p></div><button onclick="window.closeCollectionModal()" class="text-gray-400 hover:text-white transition-colors"><i class="fas fa-times text-2xl"></i></button></div><div id="collection-grid" class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-4 overflow-y-auto p-2 bg-gray-900 rounded-lg flex-grow"></div><div class="mt-4 flex-shrink-0"><button id="collection-reward-button" onclick="window.claimCollectionReward()" class="w-full py-3 font-bold rounded-xl transition-all shadow-lg text-lg" disabled>Забрать 22 222 Лапок</button></div></div></div>
     
-    <!-- НОВОЕ МОДАЛЬНОЕ ОКНО: ПРЕДПРОСМОТР ПИТОМЦА -->
     <div id="pet-preview-modal" class="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-[1000] p-4" style="display: none;" onclick="window.closePetPreview()">
         <div id="pet-preview-content" class="p-8 rounded-2xl text-center w-full max-w-sm transition-all" onclick="event.stopPropagation()">
             <img id="pet-preview-image" src="" alt="" class="w-32 h-32 object-cover mx-auto mb-4 rounded-xl bg-gray-700 border-4 border-gray-500">
             <h3 id="pet-preview-name" class="text-3xl font-extrabold mb-1"></h3>
             <p id="pet-preview-rarity" class="text-lg mb-6"></p>
             <div id="pet-preview-buttons" class="flex space-x-4">
-                <!-- Кнопки будут добавлены динамически -->
-            </div>
+                </div>
              <button onclick="window.closePetPreview()" class="w-full mt-4 py-2 bg-gray-600 hover:bg-gray-500 text-white font-bold rounded-xl">Закрыть</button>
         </div>
     </div>
@@ -961,6 +958,26 @@
   // Initialize Firebase
   const app = initializeApp(firebaseConfig);
 </script>
+
+<script>
+async function checkSiteStatus() {
+  try {
+    const response = await fetch('/status.json', { cache: "no-store" });
+    const data = await response.json();
+    if (!data.open) {
+      // Редирект на страницу "Сайт закрыт"
+      window.location.href = '/closed.html';
+    }
+  } catch (error) {
+    console.error('Не удалось проверить статус сайта', error);
+  }
+}
+
+// Проверка сразу после загрузки
+checkSiteStatus();
+
+// Проверка каждые 60 секунд
+setInterval(checkSiteStatus, 60000);
+</script>
 </body>
 </html>
-
