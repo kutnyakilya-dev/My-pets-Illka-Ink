@@ -942,7 +942,25 @@
              <button onclick="window.closePetPreview()" class="w-full mt-4 py-2 bg-gray-600 hover:bg-gray-500 text-white font-bold rounded-xl">Закрыть</button>
         </div>
     </div>
+<script type="module">
+  // Import the functions you need from the SDKs you need
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-app.js";
+  // TODO: Add SDKs for Firebase products that you want to use
+  // https://firebase.google.com/docs/web/setup#available-libraries
 
+  // Your web app's Firebase configuration
+  const firebaseConfig = {
+    apiKey: "AIzaSyARZvFpMMn5t8pg5gb2bWA6OrZC1L8DBSA",
+    authDomain: "my-pet-c8684.firebaseapp.com",
+    projectId: "my-pet-c8684",
+    storageBucket: "my-pet-c8684.firebasestorage.app",
+    messagingSenderId: "102742166711",
+    appId: "1:102742166711:web:aa6b251fd6d6c993c71132"
+  };
+
+  // Initialize Firebase
+  const app = initializeApp(firebaseConfig);
+</script>
 </body>
 </html>
 
