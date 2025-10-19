@@ -14,16 +14,12 @@
     
 <script type="module">
         // --- Глобальные настройки и состояние ---
-        const CURRENT_UPDATE_VERSION = '2.3.0'; // Изменено
+        const CURRENT_UPDATE_VERSION = '2.3.0'; 
         const PASSIVE_TICK_RATE = 1000; 
         const SOUND_COOLDOWN = 150; 
         let passiveIntervalId = null; 
         let lastSoundTime = 0; 
         let currentCaseId = 'farmer'; 
-        // --- НОВЫЕ ПЕРЕМЕННЫЕ ДЛЯ ПОДАРКА ---
-        let giftTimerInterval = null;
-        const GIFT_DURATION = 30 * 60 * 1000; // 30 минут
-
         window.gameState = {
             paws: 0.00, 
             baseClickValue: 0.09,
@@ -36,7 +32,6 @@
             },
             foundPets: [], 
             isCollectionRewardClaimed: false,
-            // --- НОВЫЕ СВОЙСТВА ДЛЯ ТЕМ И МУЗЫКИ ---
             isThemeRewardClaimed: false,
             unlockedThemes: ['standard'],
             currentTheme: 'standard',
@@ -49,7 +44,6 @@
         const JUNGLE_CASE_COST = 2000.00;
         const SNOWY_CASE_COST = 120000.00;
 
-        // --- УЛУЧШЕНИЯ И ИХ СТОИМОСТЬ ---
         const UPGRADE_TIERS = {
             equippedPets: [
                 { level: 1, cost: 2000.00, newMax: 4, name: "Дополнительное Место (I)" },
@@ -57,7 +51,6 @@
             ]
         };
 
-        // --- СПИСОК ПРЕДМЕТОВ С РЕДКОСТЯМИ, ЦВЕТАМИ И ЦЕНАМИ ПРОДАЖИ ---
         const FARMER_CASE_ITEMS = [
             { name: "Собака", rarity: "Обычный", border: "border-gray-400", color: "text-gray-400", weight: 35.00, icon: "https://files.catbox.moe/nccx9g.png", value: 25.00, passiveValue: 0.08, description: "Верный друг и охранник фермы." },
             { name: "Овца", rarity: "Обычный", border: "border-gray-400", color: "text-gray-400", weight: 35.00, icon: "https://files.catbox.moe/v2hob0.png", value: 40.00, passiveValue: 0.10, description: "Пушистое облачко, дающее теплую шерсть." }, 
@@ -111,18 +104,11 @@
         const ALL_PETS = [...new Map([...FARMER_CASE_ITEMS, ...JUNGLE_CASE_ITEMS, ...SNOWY_CASE_ITEMS].map(item => [item.name, item])).values()];
         const COLLECTION_REWARD = 22222;
         
-        // --- НОВЫЕ КОНСТАНТЫ ДЛЯ МУЗЫКИ И ТЕМ ---
         const MUSIC_TRACKS = {
             standard: { name: "Стандартная", src: "https://files.catbox.moe/b1gm68.mp3" },
             crystal: { name: "Кристальная", src: "https://files.catbox.moe/ran4qx.mp3" },
         };
 
-        // --- СИСТЕМА ТЕМ ---
-        // Чтобы добавить новую тему, скопируйте объект, измените ID (например, 'ocean_breeze'),
-        // название и CSS. CSS использует переменные для легкой настройки.
-        // Когда вы добавите новый элемент в HTML (например, новую кнопку), 
-        // просто используйте классы с переменными (например, bg-[var(--bg-primary)]) 
-        // или добавьте новый стиль для этого элемента в каждую тему здесь.
         const THEMES = {
             'standard': {
                 name: "Стандарт",
@@ -200,7 +186,6 @@
             if (navClickSynth) { try { const audioNow = Tone.context.currentTime; navClickSynth.triggerAttackRelease("G5", "32n", audioNow); navClickSynth.triggerAttackRelease("A5", "32n", audioNow + 0.05); } catch (e) { console.error("Audio scheduling error:", e); } }
         }
 
-        // --- Screen Wake Lock ---
         let wakeLock = null;
         const requestWakeLock = async () => {
             if ('wakeLock' in navigator) {
@@ -218,40 +203,11 @@
                 console.warn('Wake Lock API not supported.');
             }
         };
-        
-        // --- НОВАЯ ФУНКЦИЯ ДЛЯ ПОДАРКА: Обновление таймера ---
-        function updateGiftTimer() {
-            const timerElement = document.getElementById('gift-timer');
-            const giftEndTime = parseInt(localStorage.getItem('petFarmGiftEndTime') || '0');
-            const remaining = giftEndTime - Date.now();
 
-            if (remaining > 0) {
-                const minutes = Math.floor((remaining / 1000 / 60) % 60).toString().padStart(2, '0');
-                const seconds = Math.floor((remaining / 1000) % 60).toString().padStart(2, '0');
-                timerElement.textContent = `Усиление: ${minutes}:${seconds}`;
-                timerElement.style.display = 'block';
-            } else {
-                timerElement.style.display = 'none';
-                if (giftTimerInterval) {
-                    clearInterval(giftTimerInterval);
-                    giftTimerInterval = null;
-                }
-                updateClickValueDisplay(); // Обновить силу клика до стандартной
-            }
-        }
-        
         function calculateClickValue() {
             let totalBonus = 0;
             const activePets = window.gameState.inventory.filter(pet => window.gameState.selectedPets.includes(pet.id));
             activePets.forEach(pet => { if (pet.clickBonus) totalBonus += pet.clickBonus; });
-
-            // --- НОВАЯ ЛОГИКА ДЛЯ ПОДАРКА ---
-            const giftEndTime = parseInt(localStorage.getItem('petFarmGiftEndTime') || '0');
-            if (Date.now() < giftEndTime) {
-                return 25 + totalBonus;
-            }
-            // --- КОНЕЦ НОВОЙ ЛОГИКИ ---
-            
             return window.gameState.baseClickValue + totalBonus;
         }
 
@@ -321,7 +277,6 @@
                 return parseFloat(localStorage.getItem('petFarmPaws')) || 0.00;
             } catch (e) {
                 console.error("Ошибка при загрузке из LocalStorage:", e);
-                // Reset to defaults on error
                 Object.assign(window.gameState, { inventory: [], selectedPets: [], upgrades: { equippedPetsLevel: 0 }, foundPets: [], isCollectionRewardClaimed: false, isThemeRewardClaimed: false, unlockedThemes: ['standard'], currentTheme: 'standard', unlockedMusic: ['standard'], musicPlaylist: ['standard'], currentMusicTrackIndex: 0 });
                 return 0.00;
             }
@@ -729,7 +684,7 @@
 
             if (isInventoryItem) {
                 petData = window.gameState.inventory.find(p => p.id === identifier);
-            } else { // source === 'case'
+            } else { 
                 petData = ALL_PETS.find(p => p.name === identifier);
             }
 
@@ -808,7 +763,6 @@
             document.getElementById('pet-preview-modal').style.display = 'none';
         }
 
-        // --- Логика Коллекции ---
         window.showCollectionModal = function() { playNavClickSound(); renderCollection(); document.getElementById('collection-modal').style.display = 'flex'; };
         window.closeCollectionModal = function() { playNavClickSound(); document.getElementById('collection-modal').style.display = 'none'; };
         window.claimCollectionReward = function() {
@@ -842,7 +796,7 @@
             });
             const allFound = foundCount >= totalCount;
             const rewardClaimed = window.gameState.isCollectionRewardClaimed;
-            rewardButton.className = 'w-full py-3 font-bold rounded-xl transition-all shadow-lg text-lg'; // Reset classes
+            rewardButton.className = 'w-full py-3 font-bold rounded-xl transition-all shadow-lg text-lg';
             if (rewardClaimed) {
                 rewardButton.disabled = true;
                 rewardButton.textContent = 'Награда получена';
@@ -858,14 +812,13 @@
             }
         }
         
-        // --- НОВЫЕ ФУНКЦИИ: ТЕМЫ И МУЗЫКА ---
         window.applyTheme = function(themeId) {
             if (!THEMES[themeId]) return;
             document.getElementById('theme-styles').innerHTML = THEMES[themeId].css;
             window.gameState.currentTheme = themeId;
             savePaws(window.gameState.paws);
             if(document.getElementById('themes-modal').style.display === 'flex') {
-                renderThemesModal(); // Re-render to show active state
+                renderThemesModal(); 
             }
         }
 
@@ -921,7 +874,6 @@
             } else if (!isChecked && playlist.includes(trackId)) {
                 window.gameState.musicPlaylist = playlist.filter(id => id !== trackId);
             }
-            // Prevent player from disabling all music which could stop playback
             if (window.gameState.musicPlaylist.length === 0 && isMusicPlaying) {
                  const musicPlayer = document.getElementById('music-player');
                  musicPlayer.pause();
@@ -940,7 +892,6 @@
             }
             if(!window.gameState.unlockedMusic.includes('crystal')) {
                 window.gameState.unlockedMusic.push('crystal');
-                // Also add it to the playlist automatically
                 if(!window.gameState.musicPlaylist.includes('crystal')) {
                     window.gameState.musicPlaylist.push('crystal');
                 }
@@ -965,42 +916,14 @@
             if (localStorage.getItem('lastShownUpdateVersion') !== CURRENT_UPDATE_VERSION) { localStorage.setItem('lastShownUpdateVersion', CURRENT_UPDATE_VERSION); }
         };
 
-        // --- НОВАЯ ФУНКЦИЯ ДЛЯ ПОДАРКА: Инициализация и проверка ---
-        function initializeGiftFeature() {
-            const giftActivated = localStorage.getItem('petFarmGiftActivated');
-            const giftModal = document.getElementById('gift-modal');
-
-            if (!giftActivated) {
-                const endTime = Date.now() + GIFT_DURATION;
-                localStorage.setItem('petFarmGiftActivated', 'true');
-                localStorage.setItem('petFarmGiftEndTime', endTime.toString());
-                giftModal.style.display = 'flex';
-            }
-
-            const giftEndTime = parseInt(localStorage.getItem('petFarmGiftEndTime') || '0');
-            if (Date.now() < giftEndTime) {
-                if (giftTimerInterval) clearInterval(giftTimerInterval);
-                giftTimerInterval = setInterval(updateGiftTimer, 1000);
-                updateGiftTimer();
-            } else {
-                 document.getElementById('gift-timer').style.display = 'none';
-            }
-        }
-        
-        async function initGame() {
+        // --- НОВАЯ ЛОГИКА ЗАГРУЗКИ ---
+        function startGame() {
             updateAppState(false); 
             window.gameState.paws = loadPaws();
-            window.applyTheme(window.gameState.currentTheme); // Применяем тему при загрузке
+            window.applyTheme(window.gameState.currentTheme); 
             migrateInventory(); 
             window.gameState.isDbReady = true;
-
-            // --- ИЗМЕНЕНИЕ: Порядок вызова функций ---
-            // Сначала обновляем дисплей, чтобы показать правильную силу клика с самого начала
-            updatePawsDisplay(); 
-            
-            // Затем инициализируем подарок
-            initializeGiftFeature();
-
+            updatePawsDisplay();
             updateAppState(true); 
             document.addEventListener('visibilitychange', handleVisibilityChange);
             managePassiveLoop(); 
@@ -1010,17 +933,131 @@
             setupResetConfirmationListener();
             requestWakeLock();
             
-            // Показываем сначала модальное окно с темой, если нужно
             if (!window.gameState.isThemeRewardClaimed) {
                 document.getElementById('theme-reward-modal').style.display = 'flex';
             } else {
-                // Не показываем окно обновления, если показываем окно подарка
-                if (!localStorage.getItem('petFarmGiftActivated')) {
-                     // Окно подарка будет показано в initializeGiftFeature
-                } else {
-                     window.checkAndShowUpdatesScreen(); 
+                window.checkAndShowUpdatesScreen(); 
+            }
+        }
+
+        async function initLoading() {
+            const loadingScreen = document.getElementById('loading-screen');
+            const progressBar = document.getElementById('progress-bar');
+            const progressText = document.getElementById('loading-progress-text');
+
+            // Настройка анимации частиц
+            const canvas = document.getElementById('particle-canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            let particlesArray = [];
+
+            class Particle {
+                constructor() {
+                    this.x = Math.random() * canvas.width;
+                    this.y = Math.random() * canvas.height;
+                    this.size = Math.random() * 5 + 1;
+                    this.speedX = Math.random() * 3 - 1.5;
+                    this.speedY = Math.random() * 3 - 1.5;
+                    this.color = `hsla(${Math.random() * 360}, 100%, 75%, 0.8)`;
+                }
+                update() {
+                    this.x += this.speedX;
+                    this.y += this.speedY;
+                    if (this.size > 0.2) this.size -= 0.1;
+                    if (this.x < 0 || this.x > canvas.width) this.speedX *= -1;
+                    if (this.y < 0 || this.y > canvas.height) this.speedY *= -1;
+                }
+                draw() {
+                    ctx.fillStyle = this.color;
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                    ctx.fill();
                 }
             }
+
+            function initParticles() {
+                for (let i = 0; i < 100; i++) {
+                    particlesArray.push(new Particle());
+                }
+            }
+
+            function handleParticles() {
+                for (let i = 0; i < particlesArray.length; i++) {
+                    particlesArray[i].update();
+                    particlesArray[i].draw();
+                    if (particlesArray[i].size <= 0.3) {
+                        particlesArray.splice(i, 1);
+                        i--;
+                        particlesArray.push(new Particle());
+                    }
+                }
+            }
+            
+            let animationFrameId;
+            function animateParticles() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                handleParticles();
+                animationFrameId = requestAnimationFrame(animateParticles);
+            }
+            initParticles();
+            animateParticles();
+            window.addEventListener('resize', () => {
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+                particlesArray = [];
+                initParticles();
+            });
+
+
+            // Собираем все ассеты для загрузки
+            const assetsToLoad = [];
+            Object.values(CASES).forEach(c => {
+                assetsToLoad.push(c.icon);
+                c.items.forEach(item => assetsToLoad.push(item.icon));
+            });
+            Object.values(MUSIC_TRACKS).forEach(track => assetsToLoad.push(track.src));
+            const uniqueAssets = [...new Set(assetsToLoad)];
+
+            let loadedCount = 0;
+            const totalAssets = uniqueAssets.length;
+
+            for (const assetUrl of uniqueAssets) {
+                try {
+                    await new Promise((resolve, reject) => {
+                         // Простая проверка по расширению файла
+                        if (assetUrl.match(/\.(mp3|wav|ogg)$/)) {
+                            const audio = new Audio();
+                            audio.src = assetUrl;
+                            audio.oncanplaythrough = resolve;
+                            audio.onerror = reject;
+                        } else if (assetUrl.match(/\.(png|jpg|jpeg|gif)$/)) {
+                            const img = new Image();
+                            img.src = assetUrl;
+                            img.onload = resolve;
+                            img.onerror = reject;
+                        } else {
+                            resolve(); // Для URL-адресов, которые не являются изображениями или аудио (например, placeholder)
+                        }
+                    });
+                } catch (error) {
+                    console.warn(`Не удалось загрузить ассет: ${assetUrl}`, error);
+                }
+                
+                loadedCount++;
+                const progress = (loadedCount / totalAssets) * 100;
+                progressBar.style.width = `${progress}%`;
+                progressText.textContent = `Загрузка ассетов... ${Math.round(progress)}%`;
+                 await new Promise(res => setTimeout(res, 10)); // Небольшая задержка для плавности
+            }
+
+            // Завершение загрузки
+            loadingScreen.classList.add('fade-out');
+            setTimeout(() => {
+                loadingScreen.style.display = 'none';
+                cancelAnimationFrame(animationFrameId); // Останавливаем анимацию частиц
+                startGame();
+            }, 500); // Время должно совпадать с transition в CSS
         }
         
         window.setupNavigation = function() {
@@ -1041,10 +1078,11 @@
             return { showSection };
         }
         
-        window.onload = initGame;
+        window.onload = initLoading;
     </script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
+        :root { --bg-primary: #1a202c; } /* Устанавливаем базовый фон для заставки */
         body { font-family: 'Inter', sans-serif; background-color: var(--bg-primary); color: var(--text-primary); margin: 0; padding: 0; display: flex; flex-direction: column; min-height: 10vh; transition: background-color 0.3s; }
         .header { background-color: var(--header-bg); }
         .bottom-nav { background-color: var(--bg-secondary); border-top: 1px solid var(--border-primary); }
@@ -1098,17 +1136,78 @@
         .modal-secret-glow { border: 2px solid #fff; animation: rainbow-glow 3s infinite alternate; }
         @keyframes mega-secret-modal-glow { 0%, 100% { box-shadow: 0 0 30px #ffdf00, inset 0 0 15px #ffdf0044; border-color: #ffdf00; } 50% { box-shadow: 0 0 40px #ffA500, inset 0 0 20px #ffA50055; border-color: #ffA500; } }
         .modal-mega-secret-glow { border: 2px solid; animation: mega-secret-modal-glow 2s infinite alternate; }
+
+        /* --- Стили для экрана загрузки --- */
+        #loading-screen {
+            position: fixed;
+            inset: 0;
+            background-color: #111827;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            transition: opacity 0.5s ease-out;
+        }
+        #loading-screen.fade-out {
+            opacity: 0;
+        }
+        #particle-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+        }
+        #loading-screen h1 {
+            font-size: 3rem;
+            font-weight: 900;
+            letter-spacing: 0.1em;
+            text-shadow: 0 0 10px rgba(255, 165, 0, 0.7), 0 0 20px rgba(255, 165, 0, 0.5);
+            margin-bottom: 2rem;
+        }
+        #progress-bar-container {
+            width: 80%;
+            max-width: 400px;
+            height: 20px;
+            background-color: #374151;
+            border-radius: 10px;
+            overflow: hidden;
+            border: 2px solid #4b5563;
+            box-shadow: inset 0 0 5px rgba(0,0,0,0.5);
+        }
+        #progress-bar {
+            width: 0%;
+            height: 100%;
+            background: linear-gradient(90deg, #f59e0b, #ef4444);
+            border-radius: 8px;
+            transition: width 0.2s ease-out;
+        }
+        #loading-progress-text {
+            margin-top: 1rem;
+            font-size: 1rem;
+            color: #d1d5db;
+        }
     </style>
 </head>
 <body class="min-h-screen">
+    
+    <!-- Экран загрузки -->
+    <div id="loading-screen">
+        <canvas id="particle-canvas"></canvas>
+        <h1>Pet Farm Clicker</h1>
+        <div id="progress-bar-container">
+            <div id="progress-bar"></div>
+        </div>
+        <p id="loading-progress-text">Инициализация...</p>
+    </div>
+
     <audio id="music-player" onended="window.playNextTrack()"></audio>
 
     <header class="header fixed top-0 left-0 w-full p-3 shadow-lg z-50 flex justify-between items-center h-16 transition-colors">
-        <div class="flex items-center space-x-4">
-             <div class="text-xl font-black tracking-wider">Pet Farm</div>
-             <!-- НОВЫЙ ЭЛЕМЕНТ ДЛЯ ТАЙМЕРА -->
-             <div id="gift-timer" class="hidden text-lg font-bold bg-yellow-500 text-gray-900 px-3 py-1 rounded-lg shadow-lg"></div>
-        </div>
+        <div class="text-xl font-black tracking-wider">Pet Farm</div>
         <div class="flex flex-col items-end">
             <p id="paws-display" class="text-lg font-extrabold text-orange-400">Лапки: 0.00</p>
             <p id="user-id-display" class="text-xs mt-0">Локальное хранилище</p>
@@ -1242,7 +1341,6 @@
              <button onclick="window.closePetPreview()" class="w-full mt-4 py-2 bg-gray-600 hover:bg-gray-500 font-bold rounded-xl">Закрыть</button>
         </div>
     </div>
-    <!-- НОВЫЕ МОДАЛЬНЫЕ ОКНА ДЛЯ ТЕМ И МУЗЫКИ -->
     <div id="theme-reward-modal" class="modal fixed inset-0 flex items-center justify-center z-[1200] p-4" style="display: none;">
         <div class="modal-content p-8 rounded-2xl text-center shadow-2xl w-full max-w-md border-t-4 border-purple-500">
             <h2 class="text-3xl font-extrabold text-purple-400 mb-4"><i class="fas fa-gem mr-3"></i>Награда за Коллекцию!</h2>
@@ -1270,15 +1368,6 @@
                 <button onclick="window.closeMusicModal()"><i class="fas fa-times text-2xl"></i></button>
             </div>
             <div id="music-list-container" class="space-y-4 overflow-y-auto pr-2"></div>
-        </div>
-    </div>
-    <!-- НОВОЕ МОДАЛЬНОЕ ОКНО ДЛЯ ПОДАРКА -->
-    <div id="gift-modal" class="modal fixed inset-0 flex items-center justify-center z-[1300] p-4" style="display: none;">
-        <div class="modal-content p-8 rounded-2xl text-center shadow-2xl w-full max-w-md border-t-4 border-yellow-500">
-            <h2 class="text-3xl font-extrabold text-yellow-400 mb-4"><i class="fas fa-gift mr-3"></i>Подарок для игроков!</h2>
-            <p class="text-lg mb-2">Вы получили временное усиление!</p>
-            <p class="text-2xl font-bold text-white mb-6">Сила клика: <span class="text-green-400">25</span> на 30 минут!</p>
-            <button onclick="document.getElementById('gift-modal').style.display = 'none'; window.checkAndShowUpdatesScreen();" class="w-full py-3 bg-yellow-500 hover:bg-yellow-400 text-gray-900 font-bold rounded-xl mt-6">Ура!</button>
         </div>
     </div>
 </body>
