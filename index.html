@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pet Farm Clicker</title>
+    <title>My Pets</title>
     
 <script src="https://cdn.tailwindcss.com"></script>
     
@@ -916,7 +916,6 @@
             if (localStorage.getItem('lastShownUpdateVersion') !== CURRENT_UPDATE_VERSION) { localStorage.setItem('lastShownUpdateVersion', CURRENT_UPDATE_VERSION); }
         };
 
-        // --- НОВАЯ ЛОГИКА ЗАГРУЗКИ ---
         function startGame() {
             updateAppState(false); 
             window.gameState.paws = loadPaws();
@@ -939,13 +938,29 @@
                 window.checkAndShowUpdatesScreen(); 
             }
         }
+        
+        function loadInBackground(urls) {
+            console.log(`Starting background load for ${urls.length} assets.`);
+            urls.forEach(assetUrl => {
+                try {
+                    if (assetUrl.match(/\.(mp3|wav|ogg)$/)) {
+                        const audio = new Audio();
+                        audio.src = assetUrl;
+                    } else if (assetUrl.match(/\.(png|jpg|jpeg|gif)$/)) {
+                        const img = new Image();
+                        img.src = assetUrl;
+                    }
+                } catch (error) {
+                    console.warn(`Failed to start background loading for: ${assetUrl}`, error);
+                }
+            });
+        }
 
         async function initLoading() {
             const loadingScreen = document.getElementById('loading-screen');
             const progressBar = document.getElementById('progress-bar');
             const progressText = document.getElementById('loading-progress-text');
 
-            // Настройка анимации частиц
             const canvas = document.getElementById('particle-canvas');
             const ctx = canvas.getContext('2d');
             canvas.width = window.innerWidth;
@@ -1009,55 +1024,56 @@
                 initParticles();
             });
 
+            const priorityAssets = [];
+            const backgroundAssets = [];
 
-            // Собираем все ассеты для загрузки
-            const assetsToLoad = [];
-            Object.values(CASES).forEach(c => {
-                assetsToLoad.push(c.icon);
-                c.items.forEach(item => assetsToLoad.push(item.icon));
-            });
-            Object.values(MUSIC_TRACKS).forEach(track => assetsToLoad.push(track.src));
-            const uniqueAssets = [...new Set(assetsToLoad)];
+            priorityAssets.push(CASES.farmer.icon);
+            CASES.farmer.items.forEach(item => priorityAssets.push(item.icon));
 
+            backgroundAssets.push(CASES.jungle.icon);
+            CASES.jungle.items.forEach(item => backgroundAssets.push(item.icon));
+            backgroundAssets.push(CASES.snowy.icon);
+            CASES.snowy.items.forEach(item => backgroundAssets.push(item.icon));
+            Object.values(MUSIC_TRACKS).forEach(track => backgroundAssets.push(track.src));
+
+            const uniquePriorityAssets = [...new Set(priorityAssets)];
+            const uniqueBackgroundAssets = [...new Set(backgroundAssets)];
+            
             let loadedCount = 0;
-            const totalAssets = uniqueAssets.length;
+            const totalAssets = uniquePriorityAssets.length;
 
-            for (const assetUrl of uniqueAssets) {
+            progressText.textContent = `Загрузка основных ресурсов... 0%`;
+
+            for (const assetUrl of uniquePriorityAssets) {
                 try {
                     await new Promise((resolve, reject) => {
-                         // Простая проверка по расширению файла
                         if (assetUrl.match(/\.(mp3|wav|ogg)$/)) {
-                            const audio = new Audio();
-                            audio.src = assetUrl;
-                            audio.oncanplaythrough = resolve;
-                            audio.onerror = reject;
+                            const audio = new Audio(); audio.src = assetUrl; audio.oncanplaythrough = resolve; audio.onerror = reject;
                         } else if (assetUrl.match(/\.(png|jpg|jpeg|gif)$/)) {
-                            const img = new Image();
-                            img.src = assetUrl;
-                            img.onload = resolve;
-                            img.onerror = reject;
+                            const img = new Image(); img.src = assetUrl; img.onload = resolve; img.onerror = reject;
                         } else {
-                            resolve(); // Для URL-адресов, которые не являются изображениями или аудио (например, placeholder)
+                            resolve();
                         }
                     });
                 } catch (error) {
-                    console.warn(`Не удалось загрузить ассет: ${assetUrl}`, error);
+                    console.warn(`Не удалось загрузить приоритетный ассет: ${assetUrl}`, error);
                 }
                 
                 loadedCount++;
                 const progress = (loadedCount / totalAssets) * 100;
                 progressBar.style.width = `${progress}%`;
-                progressText.textContent = `Загрузка ассетов... ${Math.round(progress)}%`;
-                 await new Promise(res => setTimeout(res, 10)); // Небольшая задержка для плавности
+                progressText.textContent = `Загрузка основных ресурсов... ${Math.round(progress)}%`;
             }
 
-            // Завершение загрузки
+            progressText.textContent = `Запуск игры...`;
             loadingScreen.classList.add('fade-out');
+            
             setTimeout(() => {
                 loadingScreen.style.display = 'none';
-                cancelAnimationFrame(animationFrameId); // Останавливаем анимацию частиц
+                cancelAnimationFrame(animationFrameId);
                 startGame();
-            }, 500); // Время должно совпадать с transition в CSS
+                loadInBackground(uniqueBackgroundAssets);
+            }, 500);
         }
         
         window.setupNavigation = function() {
@@ -1197,7 +1213,7 @@
     <!-- Экран загрузки -->
     <div id="loading-screen">
         <canvas id="particle-canvas"></canvas>
-        <h1>Pet Farm Clicker</h1>
+        <h1 class="text-center px-4">My Pets</h1>
         <div id="progress-bar-container">
             <div id="progress-bar"></div>
         </div>
@@ -1207,7 +1223,7 @@
     <audio id="music-player" onended="window.playNextTrack()"></audio>
 
     <header class="header fixed top-0 left-0 w-full p-3 shadow-lg z-50 flex justify-between items-center h-16 transition-colors">
-        <div class="text-xl font-black tracking-wider">Pet Farm</div>
+        <div class="text-xl font-black tracking-wider">My Pets</div>
         <div class="flex flex-col items-end">
             <p id="paws-display" class="text-lg font-extrabold text-orange-400">Лапки: 0.00</p>
             <p id="user-id-display" class="text-xs mt-0">Локальное хранилище</p>
@@ -1372,3 +1388,4 @@
     </div>
 </body>
 </html>
+
