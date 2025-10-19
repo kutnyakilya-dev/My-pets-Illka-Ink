@@ -13,7 +13,7 @@
     
 <script type="module">
         // --- Глобальные настройки и состояние ---
-        const CURRENT_UPDATE_VERSION = '2.1.7 Hotfix'; // Изменено
+        const CURRENT_UPDATE_VERSION = '2.2.0'; // Изменено
         const PASSIVE_TICK_RATE = 1000; 
         const SOUND_COOLDOWN = 150; 
         let passiveIntervalId = null; 
@@ -35,6 +35,7 @@
         
         const FARMER_CASE_COST = 100.00; 
         const JUNGLE_CASE_COST = 2000.00;
+        const SNOWY_CASE_COST = 120000.00;
 
         // --- УЛУЧШЕНИЯ И ИХ СТОИМОСТЬ ---
         const UPGRADE_TIERS = {
@@ -46,39 +47,56 @@
 
         // --- СПИСОК ПРЕДМЕТОВ С РЕДКОСТЯМИ, ЦВЕТАМИ И ЦЕНАМИ ПРОДАЖИ ---
         const FARMER_CASE_ITEMS = [
-            { name: "Собака", rarity: "Обычный", border: "border-gray-400", color: "text-gray-400", weight: 35.00, icon: "https://files.catbox.moe/nccx9g.png", value: 25.00, passiveValue: 0.08 },
-            { name: "Овца", rarity: "Обычный", border: "border-gray-400", color: "text-gray-400", weight: 35.00, icon: "https://files.catbox.moe/v2hob0.png", value: 40.00, passiveValue: 0.10 }, 
-            { name: "Корова", rarity: "Необычный", border: "border-blue-500", color: "text-blue-500", weight: 10.00, icon: "https://files.catbox.moe/o08ewe.png", value: 60.00, passiveValue: 0.13 }, 
-            { name: "Лиса", rarity: "Необычный", border: "border-blue-500", color: "text-blue-500", weight: 10.00, icon: "https://files.catbox.moe/pl1ae0.png", value: 67.00, passiveValue: 0.15 }, 
-            { name: "Пчела", rarity: "Ультра Редкий", border: "border-purple-600", color: "text-purple-600", weight: 3.00, icon: "https://files.catbox.moe/kvm7wb.png", value: 100.00, passiveValue: 0.23 },
-            { name: "Козлик", rarity: "Ультра Редкий", border: "border-purple-600", color: "text-purple-600", weight: 3.00, icon: "https://files.catbox.moe/yjd6lu.png", value: 101.00, passiveValue: 0.24 },
-            { name: "Петух", rarity: "Легендарный", border: "border-yellow-400", color: "text-yellow-400", weight: 2.50, icon: "https://files.catbox.moe/v40m5p.png", value: 190.00, passiveValue: 0.33 },
-            { name: "Утка-Тыква", rarity: "Мифический", border: "border-red-500", color: "text-red-500", weight: 1.25, icon: "https://files.catbox.moe/a5vory.png", value: 400.00, passiveValue: 0.63 },
-            { name: "Радугобар", rarity: "Секретный", border: "border-rainbow", color: "text-orange-400", weight: 0.25, icon: "https://files.catbox.moe/42dehy.png", value: 1000.00, passiveValue: 1.11, isHiddenInPreview: true, previewName: "Секретный", previewIcon: "https://placehold.co/60x60/374151/fff?text=?" }, 
+            { name: "Собака", rarity: "Обычный", border: "border-gray-400", color: "text-gray-400", weight: 35.00, icon: "https://files.catbox.moe/nccx9g.png", value: 25.00, passiveValue: 0.08, description: "Верный друг и охранник фермы." },
+            { name: "Овца", rarity: "Обычный", border: "border-gray-400", color: "text-gray-400", weight: 35.00, icon: "https://files.catbox.moe/v2hob0.png", value: 40.00, passiveValue: 0.10, description: "Пушистое облачко, дающее теплую шерсть." }, 
+            { name: "Корова", rarity: "Необычный", border: "border-blue-500", color: "text-blue-500", weight: 10.00, icon: "https://files.catbox.moe/o08ewe.png", value: 60.00, passiveValue: 0.13, description: "Источник свежего молока и спокойствия." }, 
+            { name: "Лиса", rarity: "Необычный", border: "border-blue-500", color: "text-blue-500", weight: 10.00, icon: "https://files.catbox.moe/pl1ae0.png", value: 67.00, passiveValue: 0.15, description: "Хитрая и быстрая охотница." }, 
+            { name: "Пчела", rarity: "Ультра Редкий", border: "border-purple-600", color: "text-purple-600", weight: 3.00, icon: "https://files.catbox.moe/kvm7wb.png", value: 100.00, passiveValue: 0.23, description: "Маленькая труженица, создающая сладкий мед." },
+            { name: "Козлик", rarity: "Ультра Редкий", border: "border-purple-600", color: "text-purple-600", weight: 3.00, icon: "https://files.catbox.moe/yjd6lu.png", value: 101.00, passiveValue: 0.24, description: "Веселый и упрямый житель гор." },
+            { name: "Петух", rarity: "Легендарный", border: "border-yellow-400", color: "text-yellow-400", weight: 2.50, icon: "https://files.catbox.moe/v40m5p.png", value: 190.00, passiveValue: 0.33, description: "Громкий будильник фермы, встречающий рассвет." },
+            { name: "Утка-Тыква", rarity: "Мифический", border: "border-red-500", color: "text-red-500", weight: 1.25, icon: "https://files.catbox.moe/a5vory.png", value: 400.00, passiveValue: 0.63, description: "Загадочное существо осеннего урожая." },
+            { name: "Радугобар", rarity: "Секретный", border: "border-rainbow", color: "text-orange-400", weight: 0.25, icon: "https://files.catbox.moe/42dehy.png", value: 1000.00, passiveValue: 1.11, isHiddenInPreview: true, previewName: "Секретный", previewIcon: "https://placehold.co/60x60/374151/fff?text=?", description: "Существо, сотканное из чистого света." }, 
         ];
 
         const JUNGLE_CASE_ITEMS = [
-            { name: "Жук", rarity: "Обычный", border: "border-gray-400", color: "text-gray-400", weight: 34.975, icon: "https://files.catbox.moe/r8hzet.jpg", value: 250.00, passiveValue: 0.80 },
-            { name: "Бурундук", rarity: "Обычный", border: "border-gray-400", color: "text-gray-400", weight: 34.975, icon: "https://files.catbox.moe/xmeoz7.jpg", value: 300.00, passiveValue: 0.90 },
-            { name: "Волк", rarity: "Необычный", border: "border-blue-500", color: "text-blue-500", weight: 10.00, icon: "https://files.catbox.moe/16lk6v.jpg", value: 550.00, passiveValue: 1.30 },
-            { name: "Паук", rarity: "Необычный", border: "border-blue-500", color: "text-blue-500", weight: 10.00, icon: "https://files.catbox.moe/zz5f84.jpg", value: 600.00, passiveValue: 1.55 },
-            { name: "Ящерица", rarity: "Ультра Редкий", border: "border-purple-600", color: "text-purple-600", weight: 3.00, icon: "https://files.catbox.moe/22onk4.jpg", value: 800.00, passiveValue: 1.80 },
-            { name: "Панда", rarity: "Ультра Редкий", border: "border-purple-600", color: "text-purple-600", weight: 3.00, icon: "https://files.catbox.moe/rxydzq.jpg", value: 1100.00, passiveValue: 2.40 },
-            { name: "Жираф", rarity: "Легендарный", border: "border-yellow-400", color: "text-yellow-400", weight: 1.25, icon: "https://files.catbox.moe/xstk1s.jpg", value: 2600.00, passiveValue: 4.30 },
-            { name: "Попугай Ара", rarity: "Легендарный", border: "border-yellow-400", color: "text-yellow-400", weight: 1.25, icon: "https://files.catbox.moe/yqz28i.jpg", value: 2400.00, passiveValue: 4.00 },
-            { name: "Четырёх-головая Кобра", rarity: "Мифический", border: "border-red-500", color: "text-red-500", weight: 0.625, icon: "https://files.catbox.moe/7nor3l.jpg", value: 3500.00, passiveValue: 6.60, clickBonus: 0.02 },
-            { name: "Горилла Мандарина", rarity: "Мифический", border: "border-red-500", color: "text-red-500", weight: 0.625, icon: "https://files.catbox.moe/2s07bm.jpg", value: 4400.00, passiveValue: 7.00, clickBonus: 0.02 },
-            { name: "Пантера", rarity: "Секретный", border: "border-rainbow", color: "text-orange-400", weight: 0.125, icon: "https://files.catbox.moe/gkav13.jpg", value: 10000.00, passiveValue: 9.00, isHiddenInPreview: true, previewName: "Секретный", previewIcon: "https://placehold.co/60x60/374151/fff?text=?", clickBonus: 0.02 },
-            { name: "Огненный Тигр", rarity: "Секретный", border: "border-rainbow", color: "text-orange-400", weight: 0.125, icon: "https://files.catbox.moe/wg01g8.jpg", value: 12000.00, passiveValue: 10.80, isHiddenInPreview: true, previewName: "Секретный", previewIcon: "https://placehold.co/60x60/374151/fff?text=?", clickBonus: 0.02 },
-            { name: "Оранкл", rarity: "Мега Секретный", border: "border-mega-secret", color: "text-yellow-200", weight: 0.05, icon: "https://files.catbox.moe/p26t9k.jpg", value: 30000.00, passiveValue: 30.00, isHiddenInPreview: true, previewName: "?????", previewIcon: "https://placehold.co/60x60/374151/fff?text=?", isMegaSecret: true, clickBonus: 0.04 },
+            { name: "Жук", rarity: "Обычный", border: "border-gray-400", color: "text-gray-400", weight: 34.975, icon: "https://files.catbox.moe/r8hzet.jpg", value: 250.00, passiveValue: 0.80, description: "Маленький, но сильный житель джунглей." },
+            { name: "Бурундук", rarity: "Обычный", border: "border-gray-400", color: "text-gray-400", weight: 34.975, icon: "https://files.catbox.moe/xmeoz7.jpg", value: 300.00, passiveValue: 0.90, description: "Запасливый и юркий зверек." },
+            { name: "Волк", rarity: "Необычный", border: "border-blue-500", color: "text-blue-500", weight: 10.00, icon: "https://files.catbox.moe/16lk6v.jpg", value: 550.00, passiveValue: 1.30, description: "Одинокий охотник, воющий на луну." },
+            { name: "Паук", rarity: "Необычный", border: "border-blue-500", color: "text-blue-500", weight: 10.00, icon: "https://files.catbox.moe/zz5f84.jpg", value: 600.00, passiveValue: 1.55, description: "Искусный ткач, плетущий серебряные сети." },
+            { name: "Ящерица", rarity: "Ультра Редкий", border: "border-purple-600", color: "text-purple-600", weight: 3.00, icon: "https://files.catbox.moe/22onk4.jpg", value: 800.00, passiveValue: 1.80, description: "Быстрая, как молния, и меняющая цвет." },
+            { name: "Панда", rarity: "Ультра Редкий", border: "border-purple-600", color: "text-purple-600", weight: 3.00, icon: "https://files.catbox.moe/rxydzq.jpg", value: 1100.00, passiveValue: 2.40, description: "Любитель бамбука и мастер медитации." },
+            { name: "Жираф", rarity: "Легендарный", border: "border-yellow-400", color: "text-yellow-400", weight: 1.25, icon: "https://files.catbox.moe/xstk1s.jpg", value: 2600.00, passiveValue: 4.30, description: "Достает до самых высоких ветвей." },
+            { name: "Попугай Ара", rarity: "Легендарный", border: "border-yellow-400", color: "text-yellow-400", weight: 1.25, icon: "https://files.catbox.moe/yqz28i.jpg", value: 2400.00, passiveValue: 4.00, description: "Яркий и разговорчивый обитатель тропиков." },
+            { name: "Четырёх-головая Кобра", rarity: "Мифический", border: "border-red-500", color: "text-red-500", weight: 0.625, icon: "https://files.catbox.moe/7nor3l.jpg", value: 3500.00, passiveValue: 6.60, clickBonus: 0.02, description: "Опасная и мудрая хранительница древних тайн." },
+            { name: "Горилла Мандарина", rarity: "Мифический", border: "border-red-500", color: "text-red-500", weight: 0.625, icon: "https://files.catbox.moe/2s07bm.jpg", value: 4400.00, passiveValue: 7.00, clickBonus: 0.02, description: "Сила джунглей в одном могучем существе." },
+            { name: "Пантера", rarity: "Секретный", border: "border-rainbow", color: "text-orange-400", weight: 0.125, icon: "https://files.catbox.moe/gkav13.jpg", value: 10000.00, passiveValue: 9.00, isHiddenInPreview: true, previewName: "Секретный", previewIcon: "https://placehold.co/60x60/374151/fff?text=?", clickBonus: 0.02, description: "Тень, скользящая в ночи." },
+            { name: "Огненный Тигр", rarity: "Секретный", border: "border-rainbow", color: "text-orange-400", weight: 0.125, icon: "https://files.catbox.moe/wg01g8.jpg", value: 12000.00, passiveValue: 10.80, isHiddenInPreview: true, previewName: "Секретный", previewIcon: "https://placehold.co/60x60/374151/fff?text=?", clickBonus: 0.02, description: "Воплощение ярости и пламени." },
+            { name: "Оранкл", rarity: "Мега Секретный", border: "border-mega-secret", color: "text-yellow-200", weight: 0.05, icon: "https://files.catbox.moe/p26t9k.jpg", value: 30000.00, passiveValue: 30.00, isHiddenInPreview: true, previewName: "?????", previewIcon: "https://placehold.co/60x60/374151/fff?text=?", isMegaSecret: true, clickBonus: 0.04, description: "Древний дух, о котором слагают легенды." },
+        ];
+        
+        const SNOWY_CASE_ITEMS = [
+            { name: "Зимний заяц", rarity: "Обычный", border: "border-gray-400", color: "text-gray-400", weight: 31.17, icon: "https://files.catbox.moe/mrckut.png", value: 4000, passiveValue: 34, description: "Быстрый дух зимнего поля. Его мех белоснежен, как нетронутый снег, а большие лапы, словно снегоступы, не оставляют следов. В его прыжках скрыта сама скорость холода." },
+            { name: "Снежная Мышка", rarity: "Обычный", border: "border-gray-400", color: "text-gray-400", weight: 25.98, icon: "https://files.catbox.moe/zdk94h.png", value: 8000, passiveValue: 38, description: "Крошечный исследователь сугробов. Она вся из серебристого инея, а ее быстрые лапки оставляют на снегу едва заметные узоры-руны." },
+            { name: "Полярный волк", rarity: "Необычный", border: "border-blue-500", color: "text-blue-500", weight: 14.00, icon: "https://files.catbox.moe/6we578.png", value: 10000, passiveValue: 43, description: "Грозный призрак тундры. Его шкура — плотный, густой мех, который сливается с метелью. Глаза светятся золотом в темноте, и он всегда идет против ветра." },
+            { name: "Гагара", rarity: "Необычный", border: "border-blue-500", color: "text-blue-500", weight: 11.00, icon: "https://files.catbox.moe/gvoe3l.png", value: 12000, passiveValue: 48, description: "Элегантная птица, ныряющая в ледяную воду. Ее перья гладкие и черные, как мокрый камень, а ее крик разносится над замерзшими озерами, предвещая скорый приход весны." },
+            { name: "Северный Олень", rarity: "Ультра Редкий", border: "border-purple-600", color: "text-purple-600", weight: 6.00, icon: "https://files.catbox.moe/yzd44w.png", value: 14000, passiveValue: 55, description: "Величественный странник. Его рога покрыты тончайшей коркой льда, и когда он опускает голову, он ищет под снегом не еду, а забытые секреты земли." },
+            { name: "Горностай", rarity: "Ультра Редкий", border: "border-purple-600", color: "text-purple-600", weight: 5.00, icon: "https://files.catbox.moe/rxu25y.png", value: 25000, passiveValue: 59, description: "Безупречный охотник. Он скользит по снегу, как живой кусочек льда с черным кончиком хвоста. В его маленьком теле сосредоточена вся хитрость зимнего леса." },
+            { name: "Снежная Сова", rarity: "Легендарный", border: "border-yellow-400", color: "text-yellow-400", weight: 2.50, icon: "https://files.catbox.moe/8s5k36.png", value: 20000, passiveValue: 100, description: "Безмолвный наблюдатель. Ее оперение — застывшая метель. Она парит так низко, что кажется, будто снег поднимается, чтобы ее подхватить." },
+            { name: "Пингвин", rarity: "Легендарный", border: "border-yellow-400", color: "text-yellow-400", weight: 1.50, icon: "https://files.catbox.moe/vkvznv.png", value: 24000, passiveValue: 140, description: "Посланник ледяных берегов. Он ходит с гордым достоинством, а его черно-белый 'смокинг' всегда идеально чист, несмотря на снег и брызги." },
+            { name: "Северный Элементаль", rarity: "Мифический", border: "border-red-500", color: "text-red-500", weight: 1.00, icon: "https://files.catbox.moe/wkyi00.png", value: 28000, passiveValue: 160, description: "Существо, состоящее из кружащегося снега, льда и ветра. У него нет четкой формы, кроме пары горящих ледяных глаз. 'Распадается' на снежинки и мгновенно восстанавливается." },
+            { name: "Ледяная Моль", rarity: "Мифический", border: "border-red-500", color: "text-red-500", weight: 0.80, icon: "https://files.catbox.moe/gy0ajz.png", value: 30000, passiveValue: 180, description: "Существо в виде старого, массивного мотылька, чьи крылья сделаны из хрупкого, темного льда и покрыты узорами, напоминающими созвездия. Он движется очень медленно, почти статично." },
+            { name: "Фантомное Созвездие", rarity: "Секретный", border: "border-rainbow", color: "text-orange-400", weight: 0.45, icon: "https://files.catbox.moe/nt5i5t.png", value: 55000, passiveValue: 200, isHiddenInPreview: true, previewName: "Секретный", previewIcon: "https://placehold.co/60x60/374151/fff?text=?", description: "Он похожий на летающего ската или манта, но его тело — это крошечное, тёмное небо. На его 'коже' мерцают ледяные звезды, которые меняют свое положение по мере движения пета." },
+            { name: "Ефирный лис", rarity: "Секретный", border: "border-rainbow", color: "text-orange-400", weight: 0.30, icon: "https://files.catbox.moe/a4z2xs.png", value: 70000, passiveValue: 220, isHiddenInPreview: true, previewName: "Секретный", previewIcon: "https://placehold.co/60x60/374151/fff?text=?", description: "Лис с длинным, пушистым хвостом, но он полностью бесцветен. Он выглядит как полупрозрачный силуэт, сотканный из мельчайших частиц, которые движутся быстрее света." },
+            { name: "Ети, Скиталец Канона", rarity: "Мега Секретный", border: "border-mega-secret", color: "text-yellow-200", weight: 0.30, icon: "https://files.catbox.moe/cofhxp.png", value: 240000, passiveValue: 330, isHiddenInPreview: true, previewName: "?????", previewIcon: "https://placehold.co/60x60/374151/fff?text=?", isMegaSecret: true, description: "Это не просто животное, а живая Легенда, которая нарушает законы природы. Его зовут Ети, Скиталец Канона, поскольку он, кажется, существует вне обычного времени и пространства. Внешний вид: Он имеет человекоподобный силуэт, но его тело состоит из пульсирующего, глубокого синего инея, который никогда не тает. Его мех — это не шерсть, а длинные, полупрозрачные нити застывшего тумана, которые постоянно текут вверх, словно против гравитации, создавая эффект 'дышащего' облака." }
         ];
 
         const CASES = {
              farmer: { name: "Фермерский Кейс", cost: FARMER_CASE_COST, items: FARMER_CASE_ITEMS, icon: "https://files.catbox.moe/teasjx.png", description: "В нем животные со всей фермы!", totalWeight: FARMER_CASE_ITEMS.reduce((sum, item) => sum + item.weight, 0) },
-             jungle: { name: "Джунглийский Кейс", cost: JUNGLE_CASE_COST, items: JUNGLE_CASE_ITEMS, icon: "https://files.catbox.moe/adaf91.jpg", description: "Экзотические животные из диких джунглей!", totalWeight: JUNGLE_CASE_ITEMS.reduce((sum, item) => sum + item.weight, 0) }
+             jungle: { name: "Джунглийский Кейс", cost: JUNGLE_CASE_COST, items: JUNGLE_CASE_ITEMS, icon: "https://files.catbox.moe/adaf91.jpg", description: "Экзотические животные из диких джунглей!", totalWeight: JUNGLE_CASE_ITEMS.reduce((sum, item) => sum + item.weight, 0) },
+             snowy: { name: "Снежный Кейс", cost: SNOWY_CASE_COST, items: SNOWY_CASE_ITEMS, icon: "https://files.catbox.moe/q0sl3o.png", description: "Леденящие душу существа севера!", totalWeight: SNOWY_CASE_ITEMS.reduce((sum, item) => sum + item.weight, 0) }
         };
 
-        const ALL_PETS = [...new Map([...FARMER_CASE_ITEMS, ...JUNGLE_CASE_ITEMS].map(item => [item.name, item])).values()];
+        const ALL_PETS = [...new Map([...FARMER_CASE_ITEMS, ...JUNGLE_CASE_ITEMS, ...SNOWY_CASE_ITEMS].map(item => [item.name, item])).values()];
         const COLLECTION_REWARD = 22222;
 
         function getMaxSelectedPets() {
@@ -153,8 +171,8 @@
         
         function updatePawsDisplay() {
             const rate = calculatePassiveRate();
-            document.getElementById('paws-display').textContent = `Лапки: ${window.gameState.paws.toFixed(2)}`;
-            document.getElementById('passive-rate-display').textContent = `Авто: +${rate.toFixed(2)} / с`; 
+            document.getElementById('paws-display').textContent = `Лапки: ${window.gameState.paws.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+            document.getElementById('passive-rate-display').textContent = `Авто: +${rate.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} / с`; 
             updateClickValueDisplay();
             if (document.getElementById('case-details-section').style.display !== 'none') { window.showCaseDetails(currentCaseId, true); }
         }
@@ -210,7 +228,7 @@
                 const masterItem = masterMap.get(pet.name);
                 if (masterItem) {
                     let petUpdated = false;
-                    ['passiveValue', 'border', 'color', 'rarity', 'value', 'clickBonus', 'icon'].forEach(prop => {
+                    ['passiveValue', 'border', 'color', 'rarity', 'value', 'clickBonus', 'icon', 'description'].forEach(prop => {
                         if (pet[prop] !== masterItem[prop]) { pet[prop] = masterItem[prop]; petUpdated = true; }
                     });
                     if (petUpdated) inventoryChanged = true;
@@ -254,7 +272,7 @@
             const pet = window.gameState.inventory.find(p => p.id === petId);
             if (!pet || pet.value === undefined) return showToast("Ошибка: Цена продажи не найдена.");
             const modal = document.getElementById('sell-confirm-modal');
-            const price = pet.value.toFixed(2);
+            const price = pet.value.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
             document.getElementById('sell-pet-name').textContent = pet.name;
             document.getElementById('sell-pet-price').textContent = price;
             document.getElementById('sell-confirm-button').setAttribute('data-pet-id', petId);
@@ -275,7 +293,7 @@
             savePaws(window.gameState.paws);
             updatePawsDisplay();
             renderInventory();
-            showToast(`💰 Продано: ${pet.name} за ${pet.value.toFixed(2)} Лапок!`);
+            showToast(`💰 Продано: ${pet.name} за ${pet.value.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Лапок!`);
         };
 
         window.equipBestPets = function() {
@@ -324,7 +342,7 @@
             tiers.forEach(tier => {
                 const isPurchased = currentLevel >= tier.level;
                 const isNext = currentLevel === tier.level - 1;
-                const costDisplay = tier.cost.toFixed(2);
+                const costDisplay = tier.cost.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                 let cardClass = 'bg-gray-700 p-4 rounded-xl flex flex-col sm:flex-row items-center justify-between transition-all duration-150';
                 let buttonClass = 'py-2 px-4 rounded-lg font-bold transition-colors shadow-lg w-full sm:w-auto mt-3 sm:mt-0';
                 let buttonText, buttonDisabled = false;
@@ -380,8 +398,8 @@
                 else if (hasBonus && window.gameState.selectedPets.length < getMaxSelectedPets()) { buttonClass += ' bg-green-600 hover:bg-green-500'; } 
                 else if (hasBonus) { buttonClass += ' bg-gray-600 cursor-not-allowed opacity-70'; buttonText = 'Лимит'; }
                 else { buttonClass += ' bg-gray-600 cursor-not-allowed opacity-50'; buttonText = 'Нет бонусов'; }
-                const sellButton = item.value > 0 ? `<button onclick="window.showSellConfirmation('${item.id}')" class="py-1 px-3 rounded-lg text-sm font-semibold transition-colors bg-gray-500 hover:bg-gray-400">Продать (${item.value.toFixed(2)})</button>` : '';
-                const passiveInfo = item.passiveValue > 0 ? `<p class="text-xs text-green-400 mt-1 font-bold">Доход: +${item.passiveValue.toFixed(2)}/с</p>` : '';
+                const sellButton = item.value > 0 ? `<button onclick="window.showSellConfirmation('${item.id}')" class="py-1 px-3 rounded-lg text-sm font-semibold transition-colors bg-gray-500 hover:bg-gray-400">Продать (${item.value.toLocaleString('ru-RU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })})</button>` : '';
+                const passiveInfo = item.passiveValue > 0 ? `<p class="text-xs text-green-400 mt-1 font-bold">Доход: +${item.passiveValue.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/с</p>` : '';
                 const clickInfo = item.clickBonus > 0 ? `<p class="text-xs text-blue-400 mt-1 font-bold">Клик: +${item.clickBonus.toFixed(2)}</p>` : '';
                 const noBonusInfo = !passiveInfo && !clickInfo ? `<p class="text-xs text-gray-500 mt-1">Не дает бонусов</p>` : '';
                 const secretClass = (item.rarity === "Секретный" || item.rarity === "Мега Секретный") ? 'inventory-item-secret' : '';
@@ -391,7 +409,7 @@
         function renderCasePreview(caseId) {
             const previewContainer = document.getElementById('case-preview-container');
             previewContainer.innerHTML = '';
-            const items = CASES[caseId].items.map(item => ({ ...item, probability: item.weight })).sort((a, b) => b.probability - a.probability); 
+            const items = CASES[caseId].items.map(item => ({ ...item, probability: (item.weight / CASES[caseId].totalWeight) * 100 })).sort((a, b) => b.weight - a.weight); 
             items.forEach(item => {
                 if (item.isMegaSecret) return; 
                 const displayName = item.isHiddenInPreview ? item.previewName : item.name;
@@ -448,7 +466,7 @@
             const caseData = CASES[currentCaseId];
             if (!caseData) { return showToast("Ошибка: Данные кейса не найдены. Попробуйте перезайти."); }
             if (!window.gameState.isDbReady) { return showToast("Подождите, игра еще загружается..."); }
-            if (window.gameState.paws < caseData.cost) { return showToast(`Не хватает ${caseData.cost.toFixed(2)} Лапок!`); }
+            if (window.gameState.paws < caseData.cost) { return showToast(`Не хватает ${caseData.cost.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Лапок!`); }
 
             window.gameState.paws -= caseData.cost;
             savePaws(window.gameState.paws);
@@ -518,7 +536,7 @@
             openButton.onclick = window.startCaseSpin;
             const canAfford = window.gameState.paws >= caseData.cost;
             openButton.classList.remove('bg-red-500', 'hover:bg-red-400', 'bg-blue-500', 'hover:bg-blue-400', 'opacity-50', 'cursor-not-allowed');
-            const costText = `${caseData.cost.toFixed(2)} Лапок`;
+            const costText = `${caseData.cost.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Лапок`;
             if (canAfford) {
                 openButton.textContent = `Открыть Кейс (${costText})`;
                 openButton.classList.add('bg-blue-500', 'hover:bg-blue-400');
@@ -600,6 +618,7 @@
             const img = document.getElementById('pet-preview-image');
             const nameEl = document.getElementById('pet-preview-name');
             const rarityEl = document.getElementById('pet-preview-rarity');
+            const descriptionEl = document.getElementById('pet-preview-description');
             const buttonsContainer = document.getElementById('pet-preview-buttons');
             
             const isHidden = !isInventoryItem && petData.isHiddenInPreview;
@@ -610,7 +629,8 @@
                 nameEl.textContent = petData.previewName || "?????";
                 nameEl.className = "text-3xl font-extrabold mb-1 text-gray-400";
                 rarityEl.textContent = "???";
-                rarityEl.className = "text-lg mb-6 text-gray-400";
+                rarityEl.className = "text-lg mb-2 text-gray-400";
+                descriptionEl.textContent = "Этот питомец окутан тайной. Найдите его, чтобы узнать больше!";
                 modalContent.className = 'p-8 rounded-2xl text-center w-full max-w-sm transition-all bg-gray-800';
             } else {
                 img.src = petData.icon;
@@ -618,7 +638,8 @@
                 nameEl.textContent = petData.name;
                 nameEl.className = `text-3xl font-extrabold mb-1 ${petData.color}`;
                 rarityEl.textContent = petData.rarity;
-                rarityEl.className = `text-lg mb-6 ${petData.color}`;
+                rarityEl.className = `text-lg mb-2 ${petData.color}`;
+                descriptionEl.textContent = petData.description || "Описание отсутствует.";
 
                 modalContent.className = 'p-8 rounded-2xl text-center w-full max-w-sm transition-all'; // Reset
                 if (petData.rarity === 'Секретный') {
@@ -876,7 +897,13 @@
                     <img src="https://files.catbox.moe/adaf91.jpg" alt="Jungle Case" class="w-28 h-28 object-cover mx-auto mb-3 bg-gray-600 rounded-lg p-1 border-4 border-yellow-500">
                     <p class="text-xl font-extrabold text-white">Джунглийский Кейс</p>
                     <p class="text-xs text-gray-400 mt-1">Экзотические животные!</p>
-                    <p class="text-lg font-bold text-green-400 mt-2">2000.00 Лапок</p>
+                    <p class="text-lg font-bold text-green-400 mt-2">2 000.00 Лапок</p>
+                </div>
+                <div class="case-card" onclick="window.showCaseDetails('snowy')">
+                    <img src="https://files.catbox.moe/q0sl3o.png" alt="Snowy Case" class="w-28 h-28 object-cover mx-auto mb-3 bg-gray-600 rounded-lg p-1 border-4 border-blue-300">
+                    <p class="text-xl font-extrabold text-white">Снежный Кейс</p>
+                    <p class="text-xs text-gray-400 mt-1">Существа севера!</p>
+                    <p class="text-lg font-bold text-green-400 mt-2">120 000.00 Лапок</p>
                 </div>
             </div>
         </section>
@@ -921,8 +948,9 @@
     <div id="updates-modal" class="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-[700]" style="display: none;"><div class="bg-gray-900 p-8 rounded-2xl text-center shadow-2xl w-full max-w-md border-t-4 border-blue-500"><h2 class="text-3xl font-extrabold text-blue-400 mb-4 flex flex-wrap items-center justify-center"><i class="fas fa-bolt mr-3"></i> Нововведения <span id="updates-title-version" class="break-words ml-1"></span></h2><p class="text-lg text-gray-300 mb-6">Привет! Мы обновили игру.</p><div class="bg-gray-800 p-4 rounded-lg border border-gray-700 text-left overflow-y-auto max-h-48">
         <ul class="list-disc list-inside space-y-2 text-gray-300">
             <li class="font-bold text-yellow-300" id="updates-list-version"></li>
-            <li><span class="text-green-400 font-semibold">НОВЫЙ ЗВУК:</span> Добавлен звуковой эффект прокрутки кейса!</li>
-            <li><span class="text-purple-400 font-semibold">ИСПРАВЛЕНИЕ:</span> Кейсы больше не начинают крутиться сами по себе при открытии.</li>
+            <li><span class="text-green-400 font-semibold">НОВЫЙ КЕЙС:</span> Добавлен "Снежный кейс" с 13 новыми питомцами!</li>
+            <li><span class="text-blue-400 font-semibold">УЛУЧШЕНИЕ:</span> Теперь при просмотре питомца в инвентаре или в кейсе отображается его описание.</li>
+             <li><span class="text-purple-400 font-semibold">ИЗМЕНЕНИЕ:</span> Шансы выпадения теперь отображаются в процентах.</li>
         </ul>
     </div><button onclick="window.closeUpdatesScreen()" class="w-full py-3 bg-blue-500 hover:bg-blue-400 text-white font-bold rounded-xl mt-6">Начать играть!</button></div></div>
     <div id="reset-confirm-modal" class="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-[800] p-4" style="display: none;"><div class="bg-gray-800 p-8 rounded-2xl text-center shadow-2xl w-full max-w-sm border-t-4 border-red-500"><h3 class="text-2xl font-extrabold text-red-400 mb-4">Подтверждение Сброса</h3><p class="text-md text-gray-300 mb-4">Это действие **нельзя отменить**. Чтобы подтвердить, введите <code class="bg-gray-900 text-red-400 font-mono p-1 rounded">удалить данные</code> в поле ниже.</p><input id="reset-confirm-input" type="text" class="w-full bg-gray-900 border border-gray-700 rounded-lg p-2 text-center text-white mb-4 focus:outline-none focus:ring-2 focus:ring-red-500" placeholder="удалить данные"><div class="flex space-x-4"><button onclick="window.closeResetConfirmation()" class="flex-1 py-3 bg-gray-600 hover:bg-gray-500 text-white font-bold rounded-xl">Отмена</button><button id="reset-confirm-button" onclick="window.performReset()" class="flex-1 py-3 bg-red-800 text-gray-500 font-bold rounded-xl cursor-not-allowed" disabled>Сбросить</button></div></div></div>
@@ -935,7 +963,8 @@
         <div id="pet-preview-content" class="p-8 rounded-2xl text-center w-full max-w-sm transition-all" onclick="event.stopPropagation()">
             <img id="pet-preview-image" src="" alt="" class="w-32 h-32 object-cover mx-auto mb-4 rounded-xl bg-gray-700 border-4 border-gray-500">
             <h3 id="pet-preview-name" class="text-3xl font-extrabold mb-1"></h3>
-            <p id="pet-preview-rarity" class="text-lg mb-6"></p>
+            <p id="pet-preview-rarity" class="text-lg mb-2"></p>
+            <p id="pet-preview-description" class="text-sm text-gray-400 mb-6 max-h-24 overflow-y-auto"></p>
             <div id="pet-preview-buttons" class="flex space-x-4">
                 <!-- Кнопки будут добавлены динамически -->
             </div>
@@ -945,4 +974,3 @@
 
 </body>
 </html>
-
