@@ -20,6 +20,10 @@
         let passiveIntervalId = null; 
         let lastSoundTime = 0; 
         let currentCaseId = 'farmer'; 
+        // --- НОВЫЕ ПЕРЕМЕННЫЕ ДЛЯ ПОДАРКА ---
+        let giftTimerInterval = null;
+        const GIFT_DURATION = 30 * 60 * 1000; // 30 минут
+
         window.gameState = {
             paws: 0.00, 
             baseClickValue: 0.09,
@@ -214,11 +218,40 @@
                 console.warn('Wake Lock API not supported.');
             }
         };
+        
+        // --- НОВАЯ ФУНКЦИЯ ДЛЯ ПОДАРКА: Обновление таймера ---
+        function updateGiftTimer() {
+            const timerElement = document.getElementById('gift-timer');
+            const giftEndTime = parseInt(localStorage.getItem('petFarmGiftEndTime') || '0');
+            const remaining = giftEndTime - Date.now();
 
+            if (remaining > 0) {
+                const minutes = Math.floor((remaining / 1000 / 60) % 60).toString().padStart(2, '0');
+                const seconds = Math.floor((remaining / 1000) % 60).toString().padStart(2, '0');
+                timerElement.textContent = `Усиление: ${minutes}:${seconds}`;
+                timerElement.style.display = 'block';
+            } else {
+                timerElement.style.display = 'none';
+                if (giftTimerInterval) {
+                    clearInterval(giftTimerInterval);
+                    giftTimerInterval = null;
+                }
+                updateClickValueDisplay(); // Обновить силу клика до стандартной
+            }
+        }
+        
         function calculateClickValue() {
             let totalBonus = 0;
             const activePets = window.gameState.inventory.filter(pet => window.gameState.selectedPets.includes(pet.id));
             activePets.forEach(pet => { if (pet.clickBonus) totalBonus += pet.clickBonus; });
+
+            // --- НОВАЯ ЛОГИКА ДЛЯ ПОДАРКА ---
+            const giftEndTime = parseInt(localStorage.getItem('petFarmGiftEndTime') || '0');
+            if (Date.now() < giftEndTime) {
+                return 25 + totalBonus;
+            }
+            // --- КОНЕЦ НОВОЙ ЛОГИКИ ---
+            
             return window.gameState.baseClickValue + totalBonus;
         }
 
@@ -932,13 +965,42 @@
             if (localStorage.getItem('lastShownUpdateVersion') !== CURRENT_UPDATE_VERSION) { localStorage.setItem('lastShownUpdateVersion', CURRENT_UPDATE_VERSION); }
         };
 
+        // --- НОВАЯ ФУНКЦИЯ ДЛЯ ПОДАРКА: Инициализация и проверка ---
+        function initializeGiftFeature() {
+            const giftActivated = localStorage.getItem('petFarmGiftActivated');
+            const giftModal = document.getElementById('gift-modal');
+
+            if (!giftActivated) {
+                const endTime = Date.now() + GIFT_DURATION;
+                localStorage.setItem('petFarmGiftActivated', 'true');
+                localStorage.setItem('petFarmGiftEndTime', endTime.toString());
+                giftModal.style.display = 'flex';
+            }
+
+            const giftEndTime = parseInt(localStorage.getItem('petFarmGiftEndTime') || '0');
+            if (Date.now() < giftEndTime) {
+                if (giftTimerInterval) clearInterval(giftTimerInterval);
+                giftTimerInterval = setInterval(updateGiftTimer, 1000);
+                updateGiftTimer();
+            } else {
+                 document.getElementById('gift-timer').style.display = 'none';
+            }
+        }
+        
         async function initGame() {
             updateAppState(false); 
             window.gameState.paws = loadPaws();
             window.applyTheme(window.gameState.currentTheme); // Применяем тему при загрузке
             migrateInventory(); 
             window.gameState.isDbReady = true;
-            updatePawsDisplay();
+
+            // --- ИЗМЕНЕНИЕ: Порядок вызова функций ---
+            // Сначала обновляем дисплей, чтобы показать правильную силу клика с самого начала
+            updatePawsDisplay(); 
+            
+            // Затем инициализируем подарок
+            initializeGiftFeature();
+
             updateAppState(true); 
             document.addEventListener('visibilitychange', handleVisibilityChange);
             managePassiveLoop(); 
@@ -952,7 +1014,12 @@
             if (!window.gameState.isThemeRewardClaimed) {
                 document.getElementById('theme-reward-modal').style.display = 'flex';
             } else {
-                window.checkAndShowUpdatesScreen(); 
+                // Не показываем окно обновления, если показываем окно подарка
+                if (!localStorage.getItem('petFarmGiftActivated')) {
+                     // Окно подарка будет показано в initializeGiftFeature
+                } else {
+                     window.checkAndShowUpdatesScreen(); 
+                }
             }
         }
         
@@ -1037,7 +1104,11 @@
     <audio id="music-player" onended="window.playNextTrack()"></audio>
 
     <header class="header fixed top-0 left-0 w-full p-3 shadow-lg z-50 flex justify-between items-center h-16 transition-colors">
-        <div class="text-xl font-black tracking-wider">Pet Farm</div>
+        <div class="flex items-center space-x-4">
+             <div class="text-xl font-black tracking-wider">Pet Farm</div>
+             <!-- НОВЫЙ ЭЛЕМЕНТ ДЛЯ ТАЙМЕРА -->
+             <div id="gift-timer" class="hidden text-lg font-bold bg-yellow-500 text-gray-900 px-3 py-1 rounded-lg shadow-lg"></div>
+        </div>
         <div class="flex flex-col items-end">
             <p id="paws-display" class="text-lg font-extrabold text-orange-400">Лапки: 0.00</p>
             <p id="user-id-display" class="text-xs mt-0">Локальное хранилище</p>
@@ -1201,6 +1272,14 @@
             <div id="music-list-container" class="space-y-4 overflow-y-auto pr-2"></div>
         </div>
     </div>
+    <!-- НОВОЕ МОДАЛЬНОЕ ОКНО ДЛЯ ПОДАРКА -->
+    <div id="gift-modal" class="modal fixed inset-0 flex items-center justify-center z-[1300] p-4" style="display: none;">
+        <div class="modal-content p-8 rounded-2xl text-center shadow-2xl w-full max-w-md border-t-4 border-yellow-500">
+            <h2 class="text-3xl font-extrabold text-yellow-400 mb-4"><i class="fas fa-gift mr-3"></i>Подарок для игроков!</h2>
+            <p class="text-lg mb-2">Вы получили временное усиление!</p>
+            <p class="text-2xl font-bold text-white mb-6">Сила клика: <span class="text-green-400">25</span> на 30 минут!</p>
+            <button onclick="document.getElementById('gift-modal').style.display = 'none'; window.checkAndShowUpdatesScreen();" class="w-full py-3 bg-yellow-500 hover:bg-yellow-400 text-gray-900 font-bold rounded-xl mt-6">Ура!</button>
+        </div>
+    </div>
 </body>
 </html>
-
