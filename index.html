@@ -10,10 +10,11 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     
 <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+<style id="theme-styles"></style>
     
 <script type="module">
         // --- Глобальные настройки и состояние ---
-        const CURRENT_UPDATE_VERSION = '2.2.0'; // Изменено
+        const CURRENT_UPDATE_VERSION = '2.3.0'; // Изменено
         const PASSIVE_TICK_RATE = 1000; 
         const SOUND_COOLDOWN = 150; 
         let passiveIntervalId = null; 
@@ -31,6 +32,13 @@
             },
             foundPets: [], 
             isCollectionRewardClaimed: false,
+            // --- НОВЫЕ СВОЙСТВА ДЛЯ ТЕМ И МУЗЫКИ ---
+            isThemeRewardClaimed: false,
+            unlockedThemes: ['standard'],
+            currentTheme: 'standard',
+            unlockedMusic: ['standard'],
+            musicPlaylist: ['standard'],
+            currentMusicTrackIndex: 0,
         };
         
         const FARMER_CASE_COST = 100.00; 
@@ -98,6 +106,55 @@
 
         const ALL_PETS = [...new Map([...FARMER_CASE_ITEMS, ...JUNGLE_CASE_ITEMS, ...SNOWY_CASE_ITEMS].map(item => [item.name, item])).values()];
         const COLLECTION_REWARD = 22222;
+        
+        // --- НОВЫЕ КОНСТАНТЫ ДЛЯ МУЗЫКИ И ТЕМ ---
+        const MUSIC_TRACKS = {
+            standard: { name: "Стандартная", src: "https://files.catbox.moe/b1gm68.mp3" },
+            crystal: { name: "Кристальная", src: "https://files.catbox.moe/ran4qx.mp3" },
+        };
+
+        // --- СИСТЕМА ТЕМ ---
+        // Чтобы добавить новую тему, скопируйте объект, измените ID (например, 'ocean_breeze'),
+        // название и CSS. CSS использует переменные для легкой настройки.
+        // Когда вы добавите новый элемент в HTML (например, новую кнопку), 
+        // просто используйте классы с переменными (например, bg-[var(--bg-primary)]) 
+        // или добавьте новый стиль для этого элемента в каждую тему здесь.
+        const THEMES = {
+            'standard': {
+                name: "Стандарт",
+                css: `
+                    :root {
+                        --bg-primary: #1a202c; --bg-secondary: #2d3748; --bg-tertiary: #1f2937;
+                        --bg-accent: #4a5568; --text-primary: #e2e8f0; --text-secondary: #a0aec0;
+                        --text-accent: #63b3ed; --border-primary: #4a5568; --header-bg: #1f2937;
+                        --modal-bg: rgba(0, 0, 0, 0.8); --modal-content-bg: #2d3748;
+                    }`
+            },
+            'purple_crystal': {
+                name: "Фиолетовый кристалл",
+                css: `
+                    :root {
+                        --bg-primary: #110c22; --bg-secondary: #2c1f4a; --bg-tertiary: #1e153a;
+                        --bg-accent: #5a3c9a; --text-primary: #e6dffc; --text-secondary: #bca9f0;
+                        --text-accent: #c48eff; --border-primary: #5a3c9a; --header-bg: #1a0f35;
+                        --modal-bg: rgba(18, 12, 34, 0.7); --modal-content-bg: #2c1f4a;
+                    }
+                    .bottom-nav, .header, #pet-preview-content, .modal-content, .case-card, #inventory-empty-state, .inventory-item, #settings-section > div, .bg-gray-800 {
+                         background-color: var(--bg-secondary) !important;
+                         border-color: var(--border-primary) !important;
+                         box-shadow: 0 4px 15px rgba(138, 43, 226, 0.2);
+                    }
+                    body, html { background-color: var(--bg-primary); }
+                    .bg-gray-900 { background-color: var(--bg-tertiary) !important; }
+                    .text-white, .text-gray-300 { color: var(--text-primary) !important; }
+                    .text-gray-400 { color: var(--text-secondary) !important; }
+                    .border-gray-700 { border-color: var(--border-primary) !important; }
+                    .nav-item.active { color: var(--text-accent) !important; }
+                    .modal { backdrop-filter: blur(5px); }
+                `
+            }
+        };
+
 
         function getMaxSelectedPets() {
             const level = window.gameState.upgrades.equippedPetsLevel;
@@ -107,10 +164,26 @@
         }
         
         let clickPlayer, navClickSynth, reelTickSynth, isMusicPlaying = false; 
-        function playMusic() {
-            const audio = document.getElementById('backgroundMusic');
-            if (!isMusicPlaying) { audio.volume = 0.2; audio.play().then(() => { isMusicPlaying = true; }).catch(e => { console.warn("Ошибка автозапуска фоновой музыки:", e); }); }
+        
+        window.playNextTrack = function() {
+            if (window.gameState.musicPlaylist.length === 0) return;
+            window.gameState.currentMusicTrackIndex = (window.gameState.currentMusicTrackIndex + 1) % window.gameState.musicPlaylist.length;
+            const nextTrackId = window.gameState.musicPlaylist[window.gameState.currentMusicTrackIndex];
+            const musicPlayer = document.getElementById('music-player');
+            musicPlayer.src = MUSIC_TRACKS[nextTrackId].src;
+            musicPlayer.play().catch(e => console.warn("Ошибка воспроизведения следующего трека:", e));
+            savePaws(window.gameState.paws);
         }
+
+        function playMusic() {
+            if (isMusicPlaying || window.gameState.musicPlaylist.length === 0) return;
+            const musicPlayer = document.getElementById('music-player');
+            const currentTrackId = window.gameState.musicPlaylist[window.gameState.currentMusicTrackIndex];
+            musicPlayer.src = MUSIC_TRACKS[currentTrackId].src;
+            musicPlayer.volume = 0.2; 
+            musicPlayer.play().then(() => { isMusicPlaying = true; }).catch(e => { console.warn("Ошибка автозапуска музыки:", e); });
+        }
+
         try { clickPlayer = new Tone.PluckSynth().toDestination(); clickPlayer.volume.value = -10; } catch (e) { console.error("Критическая ошибка инициализации PluckSynth:", e); }
         try { navClickSynth = new Tone.MembraneSynth({ pitchDecay: 0.008, octaves: 0.1, envelope: { attack: 0.001, decay: 0.1, sustain: 0.0, release: 0.05 } }).toDestination(); navClickSynth.volume.value = -12; } catch (e) { console.error("Ошибка инициализации navClickSynth:", e); }
         try { reelTickSynth = new Tone.Synth({ oscillator: { type: 'sine' }, envelope: { attack: 0.001, decay: 0.05, sustain: 0, release: 0.1 } }).toDestination(); reelTickSynth.volume.value = -18; } catch (e) { console.error("Ошибка инициализации reelTickSynth:", e); }
@@ -198,15 +271,25 @@
         
         function loadPaws() {
             try {
-                window.gameState.inventory = JSON.parse(localStorage.getItem('petFarmInventory')) || [];
-                window.gameState.selectedPets = JSON.parse(localStorage.getItem('petFarmSelectedPets')) || []; 
-                window.gameState.upgrades = JSON.parse(localStorage.getItem('petFarmUpgrades')) || { equippedPetsLevel: 0 };
-                window.gameState.foundPets = JSON.parse(localStorage.getItem('petFarmFoundPets')) || [];
-                window.gameState.isCollectionRewardClaimed = JSON.parse(localStorage.getItem('petFarmCollectionRewardClaimed')) || false;
+                const loadedState = {
+                    inventory: JSON.parse(localStorage.getItem('petFarmInventory')) || [],
+                    selectedPets: JSON.parse(localStorage.getItem('petFarmSelectedPets')) || [],
+                    upgrades: JSON.parse(localStorage.getItem('petFarmUpgrades')) || { equippedPetsLevel: 0 },
+                    foundPets: JSON.parse(localStorage.getItem('petFarmFoundPets')) || [],
+                    isCollectionRewardClaimed: JSON.parse(localStorage.getItem('petFarmCollectionRewardClaimed')) || false,
+                    isThemeRewardClaimed: JSON.parse(localStorage.getItem('petFarmThemeRewardClaimed')) || false,
+                    unlockedThemes: JSON.parse(localStorage.getItem('petFarmUnlockedThemes')) || ['standard'],
+                    currentTheme: localStorage.getItem('petFarmCurrentTheme') || 'standard',
+                    unlockedMusic: JSON.parse(localStorage.getItem('petFarmUnlockedMusic')) || ['standard'],
+                    musicPlaylist: JSON.parse(localStorage.getItem('petFarmMusicPlaylist')) || ['standard'],
+                    currentMusicTrackIndex: parseInt(localStorage.getItem('petFarmCurrentMusicIndex')) || 0,
+                };
+                Object.assign(window.gameState, loadedState);
                 return parseFloat(localStorage.getItem('petFarmPaws')) || 0.00;
             } catch (e) {
                 console.error("Ошибка при загрузке из LocalStorage:", e);
-                Object.assign(window.gameState, { inventory: [], selectedPets: [], upgrades: { equippedPetsLevel: 0 }, foundPets: [], isCollectionRewardClaimed: false });
+                // Reset to defaults on error
+                Object.assign(window.gameState, { inventory: [], selectedPets: [], upgrades: { equippedPetsLevel: 0 }, foundPets: [], isCollectionRewardClaimed: false, isThemeRewardClaimed: false, unlockedThemes: ['standard'], currentTheme: 'standard', unlockedMusic: ['standard'], musicPlaylist: ['standard'], currentMusicTrackIndex: 0 });
                 return 0.00;
             }
         }
@@ -218,6 +301,12 @@
                 localStorage.setItem('petFarmUpgrades', JSON.stringify(window.gameState.upgrades));
                 localStorage.setItem('petFarmFoundPets', JSON.stringify(window.gameState.foundPets));
                 localStorage.setItem('petFarmCollectionRewardClaimed', JSON.stringify(window.gameState.isCollectionRewardClaimed));
+                localStorage.setItem('petFarmThemeRewardClaimed', JSON.stringify(window.gameState.isThemeRewardClaimed));
+                localStorage.setItem('petFarmUnlockedThemes', JSON.stringify(window.gameState.unlockedThemes));
+                localStorage.setItem('petFarmCurrentTheme', window.gameState.currentTheme);
+                localStorage.setItem('petFarmUnlockedMusic', JSON.stringify(window.gameState.unlockedMusic));
+                localStorage.setItem('petFarmMusicPlaylist', JSON.stringify(window.gameState.musicPlaylist));
+                localStorage.setItem('petFarmCurrentMusicIndex', window.gameState.currentMusicTrackIndex);
             } catch (e) { console.error("Ошибка при сохранении в LocalStorage:", e); }
         }
         
@@ -243,8 +332,8 @@
             const modal = document.getElementById('reset-confirm-modal');
             const input = document.getElementById('reset-confirm-input');
             const confirmBtn = document.getElementById('reset-confirm-button');
-            input.value = ''; // Clear previous input
-            confirmBtn.disabled = true; // Disable button
+            input.value = ''; 
+            confirmBtn.disabled = true; 
             confirmBtn.classList.add('bg-red-800', 'text-gray-500', 'cursor-not-allowed');
             confirmBtn.classList.remove('bg-red-600', 'hover:bg-red-500');
             modal.style.display = 'flex'; 
@@ -735,6 +824,99 @@
                 rewardButton.classList.add('bg-gray-600', 'text-gray-400', 'cursor-not-allowed');
             }
         }
+        
+        // --- НОВЫЕ ФУНКЦИИ: ТЕМЫ И МУЗЫКА ---
+        window.applyTheme = function(themeId) {
+            if (!THEMES[themeId]) return;
+            document.getElementById('theme-styles').innerHTML = THEMES[themeId].css;
+            window.gameState.currentTheme = themeId;
+            savePaws(window.gameState.paws);
+            if(document.getElementById('themes-modal').style.display === 'flex') {
+                renderThemesModal(); // Re-render to show active state
+            }
+        }
+
+        window.showThemesModal = function() { playNavClickSound(); renderThemesModal(); document.getElementById('themes-modal').style.display = 'flex'; };
+        window.closeThemesModal = function() { playNavClickSound(); document.getElementById('themes-modal').style.display = 'none'; };
+        function renderThemesModal() {
+            const container = document.getElementById('themes-list-container');
+            container.innerHTML = '';
+            Object.keys(THEMES).forEach(themeId => {
+                const theme = THEMES[themeId];
+                const isUnlocked = window.gameState.unlockedThemes.includes(themeId);
+                const isActive = window.gameState.currentTheme === themeId;
+
+                let buttonHtml = `<div class="bg-gray-700 p-4 rounded-xl flex items-center justify-between ${!isUnlocked ? 'opacity-50' : ''}">
+                    <span class="text-xl font-bold text-white">${theme.name}</span>`;
+                
+                if (isActive) {
+                    buttonHtml += `<button class="py-2 px-4 rounded-lg font-bold bg-green-700 text-gray-400 cursor-not-allowed">Активна</button>`;
+                } else if (isUnlocked) {
+                    buttonHtml += `<button onclick="window.applyTheme('${themeId}'); playNavClickSound();" class="py-2 px-4 rounded-lg font-bold bg-blue-500 hover:bg-blue-400 text-white">Применить</button>`;
+                } else {
+                    buttonHtml += `<button class="py-2 px-4 rounded-lg font-bold bg-gray-600 text-gray-400 cursor-not-allowed"><i class="fas fa-lock"></i></button>`;
+                }
+                buttonHtml += `</div>`;
+                container.innerHTML += buttonHtml;
+            });
+        }
+        
+        window.showMusicModal = function() { playNavClickSound(); renderMusicModal(); document.getElementById('music-modal').style.display = 'flex'; };
+        window.closeMusicModal = function() { playNavClickSound(); document.getElementById('music-modal').style.display = 'none'; };
+        function renderMusicModal() {
+             const container = document.getElementById('music-list-container');
+             container.innerHTML = '';
+             Object.keys(MUSIC_TRACKS).forEach(trackId => {
+                const track = MUSIC_TRACKS[trackId];
+                const isUnlocked = window.gameState.unlockedMusic.includes(trackId);
+                if (isUnlocked) {
+                    const isChecked = window.gameState.musicPlaylist.includes(trackId);
+                    container.innerHTML += `
+                        <label class="flex items-center justify-between p-4 bg-gray-700 rounded-xl cursor-pointer">
+                            <span class="text-lg font-semibold text-white">${track.name}</span>
+                            <input type="checkbox" onchange="window.updateMusicPlaylist('${trackId}', this.checked)" class="h-6 w-6 rounded text-purple-600 focus:ring-purple-500" ${isChecked ? 'checked' : ''}>
+                        </label>`;
+                }
+             });
+        }
+
+        window.updateMusicPlaylist = function(trackId, isChecked) {
+            playNavClickSound();
+            const playlist = window.gameState.musicPlaylist;
+            if (isChecked && !playlist.includes(trackId)) {
+                playlist.push(trackId);
+            } else if (!isChecked && playlist.includes(trackId)) {
+                window.gameState.musicPlaylist = playlist.filter(id => id !== trackId);
+            }
+            // Prevent player from disabling all music which could stop playback
+            if (window.gameState.musicPlaylist.length === 0 && isMusicPlaying) {
+                 const musicPlayer = document.getElementById('music-player');
+                 musicPlayer.pause();
+                 isMusicPlaying = false;
+            }
+            savePaws(window.gameState.paws);
+        }
+
+        window.claimThemeReward = function() {
+            playNavClickSound();
+            if(window.gameState.isThemeRewardClaimed) return;
+
+            window.gameState.isThemeRewardClaimed = true;
+            if(!window.gameState.unlockedThemes.includes('purple_crystal')) {
+                window.gameState.unlockedThemes.push('purple_crystal');
+            }
+            if(!window.gameState.unlockedMusic.includes('crystal')) {
+                window.gameState.unlockedMusic.push('crystal');
+                // Also add it to the playlist automatically
+                if(!window.gameState.musicPlaylist.includes('crystal')) {
+                    window.gameState.musicPlaylist.push('crystal');
+                }
+            }
+            savePaws(window.gameState.paws);
+            document.getElementById('theme-reward-modal').style.display = 'none';
+            showToast('🎉 Тема "Фиолетовый кристалл" и новая музыка разблокированы!');
+        }
+
 
         function setupUpdatesContent() {
             document.getElementById('updates-title-version').textContent = `(v${CURRENT_UPDATE_VERSION})`;
@@ -753,6 +935,7 @@
         async function initGame() {
             updateAppState(false); 
             window.gameState.paws = loadPaws();
+            window.applyTheme(window.gameState.currentTheme); // Применяем тему при загрузке
             migrateInventory(); 
             window.gameState.isDbReady = true;
             updatePawsDisplay();
@@ -764,7 +947,13 @@
             setupClickListener(); 
             setupResetConfirmationListener();
             requestWakeLock();
-            window.checkAndShowUpdatesScreen(); 
+            
+            // Показываем сначала модальное окно с темой, если нужно
+            if (!window.gameState.isThemeRewardClaimed) {
+                document.getElementById('theme-reward-modal').style.display = 'flex';
+            } else {
+                window.checkAndShowUpdatesScreen(); 
+            }
         }
         
         window.setupNavigation = function() {
@@ -789,16 +978,27 @@
     </script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
-        body { font-family: 'Inter', sans-serif; background-color: #1a202c; color: #e2e8f0; margin: 0; padding: 0; display: flex; flex-direction: column; min-height: 10vh; }
+        body { font-family: 'Inter', sans-serif; background-color: var(--bg-primary); color: var(--text-primary); margin: 0; padding: 0; display: flex; flex-direction: column; min-height: 10vh; transition: background-color 0.3s; }
+        .header { background-color: var(--header-bg); }
+        .bottom-nav { background-color: var(--bg-secondary); border-top: 1px solid var(--border-primary); }
+        .modal { background-color: var(--modal-bg); }
+        .modal-content { background-color: var(--modal-content-bg); }
+        .bg-gray-800 { background-color: var(--bg-secondary); }
+        .bg-gray-900 { background-color: var(--bg-tertiary); }
+        .text-white, .text-gray-300 { color: var(--text-primary); }
+        .text-gray-400 { color: var(--text-secondary); }
+        .border-gray-700 { border-color: var(--border-primary); }
+        .nav-item { color: var(--text-secondary); }
+        .nav-item.active { color: var(--text-accent); }
+        
         .content-area { flex-grow: 1; padding: 20px; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; overflow-y: auto; padding-bottom: 80px; padding-top: 80px; }
         #case-details-section, #inventory-section, #cases-section, #settings-section { width: 100%; height: 100%; max-width: 100%; padding: 0; flex-grow: 1; }
         #case-details-section > div { height: calc(100vh - 140px); border-radius: 0; margin: 0; }
-        .bottom-nav { position: fixed; bottom: 0; left: 0; width: 100%; background-color: #2d3748; border-top: 1px solid #4a5568; display: flex; justify-content: space-around; align-items: center; height: 60px; padding-bottom: env(safe-area-inset-bottom); z-index: 100; }
-        .nav-item { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #a0aec0; font-size: 0.75rem; transition: color 0.2s; cursor: pointer; user-select: none; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
-        .nav-item.active { color: #63b3ed; }
+        .bottom-nav { position: fixed; bottom: 0; left: 0; width: 100%; display: flex; justify-content: space-around; align-items: center; height: 60px; padding-bottom: env(safe-area-inset-bottom); z-index: 100; transition: background-color 0.3s, border-color 0.3s; }
+        .nav-item { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 0.75rem; transition: color 0.2s; cursor: pointer; user-select: none; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
         .nav-item i { font-size: 1.5rem; margin-bottom: 2px; flex-shrink: 0; }
         #click-button { touch-action: manipulation; }
-        .case-card { background-color: #2d3748; padding: 16px; border-radius: 1rem; text-align: center; transition: transform 0.1s; display: flex; flex-direction: column; align-items: center; box-shadow: 0 0 10px rgba(0,0,0,0.5); width: 100%; max-width: 200px; border: none; cursor: pointer; }
+        .case-card { padding: 16px; border-radius: 1rem; text-align: center; transition: transform 0.1s, background-color 0.3s; display: flex; flex-direction: column; align-items: center; width: 100%; max-width: 200px; border: none; cursor: pointer; }
         .case-card:active { transform: scale(0.98); }
         .border-gray-400 { border-color: #9ca3af !important; } 
         .border-blue-500 { border-color: #3b82f6 !important; } 
@@ -825,7 +1025,6 @@
         .preview-grid-item { border-left: 6px solid; }
         @media (max-width: 640px) { .content-area { padding: 10px; padding-top: 70px; padding-bottom: 70px; } #home-section, #inventory-section, #cases-section, #settings-section, #case-details-section { padding-top: 20px; } }
         
-        /* НОВЫЕ СТИЛИ ДЛЯ ПРЕДПРОСМОТРА И ИНВЕНТАРЯ */
         @keyframes rainbow-border-left { 0%, 100% { border-left-color: #facc15; } 25% { border-left-color: #ef4444; } 50% { border-left-color: #3b82f6; } 75% { border-left-color: #4ade80; } }
         .inventory-item-secret { animation: rainbow-border-left 3s infinite alternate; }
         @keyframes rainbow-glow { 0%, 100% { box-shadow: 0 0 25px #facc15, inset 0 0 10px #facc1533; } 25% { box-shadow: 0 0 25px #ef4444, inset 0 0 10px #ef444433; } 50% { box-shadow: 0 0 25px #3b82f6, inset 0 0 10px #3b82f633; } 75% { box-shadow: 0 0 25px #4ade80, inset 0 0 10px #4ade8033; } }
@@ -834,22 +1033,22 @@
         .modal-mega-secret-glow { border: 2px solid; animation: mega-secret-modal-glow 2s infinite alternate; }
     </style>
 </head>
-<body class="bg-gray-900 min-h-screen">
-    <audio id="backgroundMusic" loop src="https://files.catbox.moe/b1gm68.mp3"></audio>
+<body class="min-h-screen">
+    <audio id="music-player" onended="window.playNextTrack()"></audio>
 
-    <header class="header fixed top-0 left-0 w-full bg-gray-800 p-3 shadow-lg z-50 flex justify-between items-center h-16">
-        <div class="text-white text-xl font-black tracking-wider">Pet Farm</div>
+    <header class="header fixed top-0 left-0 w-full p-3 shadow-lg z-50 flex justify-between items-center h-16 transition-colors">
+        <div class="text-xl font-black tracking-wider">Pet Farm</div>
         <div class="flex flex-col items-end">
             <p id="paws-display" class="text-lg font-extrabold text-orange-400">Лапки: 0.00</p>
-            <p id="user-id-display" class="text-xs text-gray-400 mt-0">Локальное хранилище</p>
+            <p id="user-id-display" class="text-xs mt-0">Локальное хранилище</p>
         </div>
     </header>
 
     <main class="content-area w-full max-w-4xl mx-auto">
         <section id="home-section" class="flex-col items-center justify-center space-y-8 w-full h-full" style="display: flex;">
             <div class="text-center">
-                <h1 class="text-4xl font-black text-white">Кликай, чтобы заработать!</h1>
-                <p id="click-message" class="text-md text-gray-400 mt-2">Жми на кнопку (мышью или пальцем)</p>
+                <h1 class="text-4xl font-black">Кликай, чтобы заработать!</h1>
+                <p id="click-message" class="text-md mt-2">Жми на кнопку (мышью или пальцем)</p>
                 <p id="click-power-display" class="text-md text-blue-400 font-bold mt-1">Сила клика: 0.09</p>
                 <p id="passive-rate-display" class="text-md text-green-400 font-bold mt-1">Авто: +0.00 / с</p>
                 <p id="loading-message" class="text-md text-red-400 mt-2" style="display: none;">Загрузка данных...</p>
@@ -860,14 +1059,14 @@
         </section>
 
         <section id="inventory-section" class="w-full" style="display: none;">
-            <div class="flex justify-between items-center mb-6 border-b border-gray-700 pb-2">
-                <h2 class="text-3xl font-bold text-white">Мой Инвентарь</h2>
+            <div class="flex justify-between items-center mb-6 border-b pb-2">
+                <h2 class="text-3xl font-bold">Мой Инвентарь</h2>
                 <button onclick="window.showUpgradesModal()" class="px-4 py-2 bg-yellow-600 hover:bg-yellow-500 text-white font-bold rounded-xl transition-all shadow-md text-sm sm:text-base">
                     <i class="fas fa-arrow-up mr-1"></i> Улучшения
                 </button>
             </div>
             <div class="bg-gray-800 p-4 rounded-xl mb-4 flex justify-between items-center border-l-4 border-blue-500 shadow-lg">
-                <p class="text-lg font-semibold text-white">Активные Питомцы</p>
+                <p class="text-lg font-semibold">Активные Питомцы</p>
                 <p id="active-pets-count" class="text-lg font-bold text-blue-400">Активных: 0 / 3</p>
             </div>
             <button onclick="window.equipBestPets()" class="w-full py-3 mb-4 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-xl transition-all shadow-lg hover:shadow-purple-600/50">
@@ -877,32 +1076,32 @@
                 <i class="fas fa-book mr-2"></i> Коллекция
             </button>
             <div id="inventory-container" class="space-y-4"></div>
-            <div id="inventory-empty-state" class="flex flex-col items-center justify-center p-8 bg-gray-800 rounded-xl mt-4 border-2 border-dashed border-gray-700" style="display: flex;">
+            <div id="inventory-empty-state" class="flex flex-col items-center justify-center p-8 rounded-xl mt-4 border-2 border-dashed" style="display: flex;">
                 <i class="fas fa-box-open text-6xl text-gray-600 mb-4"></i>
-                <p class="text-xl font-semibold text-gray-400">Инвентарь пуст!</p>
-                <p class="text-sm text-gray-500 mt-2">Открой кейсы, чтобы найти животных.</p>
+                <p class="text-xl font-semibold">Инвентарь пуст!</p>
+                <p class="text-sm mt-2">Открой кейсы, чтобы найти животных.</p>
             </div>
         </section>
 
         <section id="cases-section" class="w-full" style="display: none;">
-            <h2 class="text-3xl font-bold text-white mb-6 border-b border-gray-700 pb-2">Магазин Кейсов</h2>
+            <h2 class="text-3xl font-bold mb-6 border-b pb-2">Магазин Кейсов</h2>
             <div class="grid grid-cols-2 gap-6 sm:grid-cols-3 md:grid-cols-4">
                 <div class="case-card" onclick="window.showCaseDetails('farmer')">
-                    <img src="https://files.catbox.moe/teasjx.png" alt="Farmer Case" class="w-28 h-28 object-cover mx-auto mb-3 bg-gray-600 rounded-lg p-1 border-4 border-green-500">
-                    <p class="text-xl font-extrabold text-white">Фермерский Кейс</p>
-                    <p class="text-xs text-gray-400 mt-1">Животные со всей фермы!</p>
+                    <img src="https://files.catbox.moe/teasjx.png" alt="Farmer Case" class="w-28 h-28 object-cover mx-auto mb-3 rounded-lg p-1 border-4 border-green-500">
+                    <p class="text-xl font-extrabold">Фермерский Кейс</p>
+                    <p class="text-xs mt-1">Животные со всей фермы!</p>
                     <p class="text-lg font-bold text-green-400 mt-2">100.00 Лапок</p>
                 </div>
                 <div class="case-card" onclick="window.showCaseDetails('jungle')">
-                    <img src="https://files.catbox.moe/adaf91.jpg" alt="Jungle Case" class="w-28 h-28 object-cover mx-auto mb-3 bg-gray-600 rounded-lg p-1 border-4 border-yellow-500">
-                    <p class="text-xl font-extrabold text-white">Джунглийский Кейс</p>
-                    <p class="text-xs text-gray-400 mt-1">Экзотические животные!</p>
+                    <img src="https://files.catbox.moe/adaf91.jpg" alt="Jungle Case" class="w-28 h-28 object-cover mx-auto mb-3 rounded-lg p-1 border-4 border-yellow-500">
+                    <p class="text-xl font-extrabold">Джунглийский Кейс</p>
+                    <p class="text-xs mt-1">Экзотические животные!</p>
                     <p class="text-lg font-bold text-green-400 mt-2">2 000.00 Лапок</p>
                 </div>
                 <div class="case-card" onclick="window.showCaseDetails('snowy')">
-                    <img src="https://files.catbox.moe/q0sl3o.png" alt="Snowy Case" class="w-28 h-28 object-cover mx-auto mb-3 bg-gray-600 rounded-lg p-1 border-4 border-blue-300">
-                    <p class="text-xl font-extrabold text-white">Снежный Кейс</p>
-                    <p class="text-xs text-gray-400 mt-1">Существа севера!</p>
+                    <img src="https://files.catbox.moe/q0sl3o.png" alt="Snowy Case" class="w-28 h-28 object-cover mx-auto mb-3 rounded-lg p-1 border-4 border-blue-300">
+                    <p class="text-xl font-extrabold">Снежный Кейс</p>
+                    <p class="text-xs mt-1">Существа севера!</p>
                     <p class="text-lg font-bold text-green-400 mt-2">120 000.00 Лапок</p>
                 </div>
             </div>
@@ -910,27 +1109,32 @@
 
         <section id="case-details-section" class="w-full flex-col" style="display: none;">
             <div class="bg-gray-800 p-4 sm:p-8 rounded-xl w-full mx-auto flex-grow overflow-auto">
-                <button onclick="window.closeCaseDetails()" class="text-gray-400 hover:text-white mb-4 flex items-center"><i class="fas fa-arrow-left mr-2"></i> Вернуться к Кейсам</button>
-                <h2 id="case-details-title" class="text-4xl font-black text-white mb-6"></h2>
-                <div class="relative bg-gray-900 rounded-xl p-2 mb-6 border-4 border-gray-700 reel-viewport">
+                <button onclick="window.closeCaseDetails()" class="hover:text-white mb-4 flex items-center"><i class="fas fa-arrow-left mr-2"></i> Вернуться к Кейсам</button>
+                <h2 id="case-details-title" class="text-4xl font-black mb-6"></h2>
+                <div class="relative bg-gray-900 rounded-xl p-2 mb-6 border-4 reel-viewport">
                     <div class="reel-indicator"></div>
                     <div id="case-reel" class="case-reel w-max items-center h-full"></div>
                 </div>
-                <button id="open-case-button" class="w-full py-4 text-xl font-extrabold text-white rounded-xl transition-all shadow-lg disabled:opacity-70 disabled:cursor-not-allowed"></button>
-                <h3 class="text-2xl font-bold text-white mt-8 mb-4">Шансы Выпадения</h3>
+                <button id="open-case-button" class="w-full py-4 text-xl font-extrabold rounded-xl transition-all shadow-lg disabled:opacity-70 disabled:cursor-not-allowed"></button>
+                <h3 class="text-2xl font-bold mt-8 mb-4">Шансы Выпадения</h3>
                 <div id="case-preview-container" class="grid grid-cols-1 sm:grid-cols-2 gap-4"></div>
             </div>
         </section>
         
          <section id="settings-section" class="w-full" style="display: none;">
-            <h2 class="text-3xl font-bold text-white mb-6 border-b border-gray-700 pb-2">Настройки</h2>
-            <div class="bg-gray-800 p-6 rounded-xl space-y-4 shadow-xl">
-                <p class="text-lg font-semibold text-white">Информация</p>
-                <button onclick="window.checkAndShowUpdatesScreen(true)" class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-lg"><i class="fas fa-list-ul mr-2"></i> История Обновлений</button>
+            <h2 class="text-3xl font-bold mb-6 border-b pb-2">Настройки</h2>
+            <div class="p-6 rounded-xl space-y-4 shadow-xl">
+                <p class="text-lg font-semibold">Персонализация</p>
+                <button onclick="window.showThemesModal()" class="w-full px-4 py-3 bg-purple-600 hover:bg-purple-500 font-semibold rounded-lg"><i class="fas fa-paint-brush mr-2"></i> Темы</button>
+                <button onclick="window.showMusicModal()" class="w-full px-4 py-3 bg-green-600 hover:bg-green-500 font-semibold rounded-lg"><i class="fas fa-music mr-2"></i> Музыка</button>
             </div>
-            <div class="bg-gray-800 p-6 rounded-xl space-y-4 shadow-xl mt-4">
-                <p class="text-lg font-semibold text-white">Данные игры</p>
-                <button onclick="window.showResetConfirmation()" class="w-full px-4 py-2 bg-red-600 hover:bg-red-500 text-white font-semibold rounded-lg">Сбросить Прогресс</button>
+            <div class="p-6 rounded-xl space-y-4 shadow-xl mt-4">
+                <p class="text-lg font-semibold">Информация</p>
+                <button onclick="window.checkAndShowUpdatesScreen(true)" class="w-full px-4 py-3 bg-blue-600 hover:bg-blue-500 font-semibold rounded-lg"><i class="fas fa-list-ul mr-2"></i> История Обновлений</button>
+            </div>
+            <div class="p-6 rounded-xl space-y-4 shadow-xl mt-4">
+                <p class="text-lg font-semibold">Данные игры</p>
+                <button onclick="window.showResetConfirmation()" class="w-full px-4 py-3 bg-red-600 hover:bg-red-500 font-semibold rounded-lg">Сбросить Прогресс</button>
             </div>
         </section>
     </main>
@@ -944,33 +1148,59 @@
     
     <!-- Modals -->
     <div id="notification-modal" class="fixed bottom-20 left-1/2 transform -translate-x-1/2 p-3 bg-gray-700 text-white rounded-lg shadow-2xl z-[500]" style="display: none;"><p id="notification-text" class="text-sm font-semibold"></p></div>
-    <div id="win-notification-modal" class="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-[600]" style="display: none;"><div class="bg-gray-800 p-8 rounded-2xl text-center shadow-[0_0_50px_rgba(255,255,255,0.1)] w-full max-w-sm"><p class="text-3xl font-extrabold text-white mb-4">Новый Питомец!</p><div id="win-icon-container" class="w-24 h-24 mb-4 flex items-center justify-center rounded-xl bg-gray-900 border-4 mx-auto overflow-hidden"></div><h3 id="win-name" class="text-xl font-extrabold mb-1"></h3><p id="win-rarity" class="text-md mb-6"></p><button id="add-to-inventory-button" class="w-full py-3 bg-green-600 hover:bg-green-500 text-white font-bold rounded-xl">Продолжить</button></div></div>
-    <div id="updates-modal" class="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-[700]" style="display: none;"><div class="bg-gray-900 p-8 rounded-2xl text-center shadow-2xl w-full max-w-md border-t-4 border-blue-500"><h2 class="text-3xl font-extrabold text-blue-400 mb-4 flex flex-wrap items-center justify-center"><i class="fas fa-bolt mr-3"></i> Нововведения <span id="updates-title-version" class="break-words ml-1"></span></h2><p class="text-lg text-gray-300 mb-6">Привет! Мы обновили игру.</p><div class="bg-gray-800 p-4 rounded-lg border border-gray-700 text-left overflow-y-auto max-h-48">
-        <ul class="list-disc list-inside space-y-2 text-gray-300">
+    <div id="win-notification-modal" class="modal fixed inset-0 flex items-center justify-center z-[600]" style="display: none;"><div class="modal-content p-8 rounded-2xl text-center shadow-[0_0_50px_rgba(255,255,255,0.1)] w-full max-w-sm"><p class="text-3xl font-extrabold mb-4">Новый Питомец!</p><div id="win-icon-container" class="w-24 h-24 mb-4 flex items-center justify-center rounded-xl bg-gray-900 border-4 mx-auto overflow-hidden"></div><h3 id="win-name" class="text-xl font-extrabold mb-1"></h3><p id="win-rarity" class="text-md mb-6"></p><button id="add-to-inventory-button" class="w-full py-3 bg-green-600 hover:bg-green-500 font-bold rounded-xl">Продолжить</button></div></div>
+    <div id="updates-modal" class="modal fixed inset-0 flex items-center justify-center z-[700]" style="display: none;"><div class="modal-content p-8 rounded-2xl text-center shadow-2xl w-full max-w-md border-t-4 border-blue-500"><h2 class="text-3xl font-extrabold text-blue-400 mb-4 flex flex-wrap items-center justify-center"><i class="fas fa-bolt mr-3"></i> Нововведения <span id="updates-title-version" class="break-words ml-1"></span></h2><p class="text-lg mb-6">Привет! Мы обновили игру.</p><div class="bg-gray-800 p-4 rounded-lg border text-left overflow-y-auto max-h-48">
+        <ul class="list-disc list-inside space-y-2">
             <li class="font-bold text-yellow-300" id="updates-list-version"></li>
-            <li><span class="text-green-400 font-semibold">НОВЫЙ КЕЙС:</span> Добавлен "Снежный кейс" с 13 новыми питомцами!</li>
-            <li><span class="text-blue-400 font-semibold">УЛУЧШЕНИЕ:</span> Теперь при просмотре питомца в инвентаре или в кейсе отображается его описание.</li>
-             <li><span class="text-purple-400 font-semibold">ИЗМЕНЕНИЕ:</span> Шансы выпадения теперь отображаются в процентах.</li>
+            <li><span class="text-green-400 font-semibold">НОВАЯ СИСТЕМА:</span> Добавлены темы оформления и выбор музыки!</li>
+            <li><span class="text-purple-400 font-semibold">НОВАЯ ТЕМА:</span> "Фиолетовый кристалл" и новый трек в награду.</li>
+             <li><span class="text-blue-400 font-semibold">ИЗМЕНЕНИЕ:</span> Обновлен дизайн настроек.</li>
         </ul>
-    </div><button onclick="window.closeUpdatesScreen()" class="w-full py-3 bg-blue-500 hover:bg-blue-400 text-white font-bold rounded-xl mt-6">Начать играть!</button></div></div>
-    <div id="reset-confirm-modal" class="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-[800] p-4" style="display: none;"><div class="bg-gray-800 p-8 rounded-2xl text-center shadow-2xl w-full max-w-sm border-t-4 border-red-500"><h3 class="text-2xl font-extrabold text-red-400 mb-4">Подтверждение Сброса</h3><p class="text-md text-gray-300 mb-4">Это действие **нельзя отменить**. Чтобы подтвердить, введите <code class="bg-gray-900 text-red-400 font-mono p-1 rounded">удалить данные</code> в поле ниже.</p><input id="reset-confirm-input" type="text" class="w-full bg-gray-900 border border-gray-700 rounded-lg p-2 text-center text-white mb-4 focus:outline-none focus:ring-2 focus:ring-red-500" placeholder="удалить данные"><div class="flex space-x-4"><button onclick="window.closeResetConfirmation()" class="flex-1 py-3 bg-gray-600 hover:bg-gray-500 text-white font-bold rounded-xl">Отмена</button><button id="reset-confirm-button" onclick="window.performReset()" class="flex-1 py-3 bg-red-800 text-gray-500 font-bold rounded-xl cursor-not-allowed" disabled>Сбросить</button></div></div></div>
-    <div id="sell-confirm-modal" class="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-[1100]" style="display: none;"><div class="bg-gray-800 p-8 rounded-2xl text-center shadow-2xl w-full max-w-sm border-t-4 border-yellow-500"><h3 class="text-2xl font-extrabold text-white mb-4">Подтверждение Продажи</h3><p class="text-md text-gray-300 mb-6">Продать **<span id="sell-pet-name" class="text-yellow-400 font-bold"></span>** за <span id="sell-pet-price" class="text-green-400 font-bold">0.00</span> Лапок?</p><div class="flex space-x-4"><button onclick="document.getElementById('sell-confirm-modal').style.display='none'; window.playNavClickSound();" class="flex-1 py-3 bg-gray-600 hover:bg-gray-500 text-white font-bold rounded-xl">Отмена</button><button id="sell-confirm-button" onclick="window.performSell()" class="flex-1 py-3 bg-green-600 hover:bg-green-500 text-white font-bold rounded-xl">Продать</button></div></div></div>
-    <div id="upgrades-modal" class="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-[800] p-4" style="display: none;"><div class="bg-gray-800 p-6 rounded-2xl shadow-2xl w-full max-w-lg border-t-4 border-yellow-500 mx-auto max-h-[90vh] flex flex-col"><div class="flex justify-between items-center mb-4"><h3 class="text-2xl font-extrabold text-white">Улучшения</h3><button onclick="window.closeUpgradesModal()" class="text-gray-400 hover:text-white"><i class="fas fa-times text-2xl"></i></button></div><p class="text-md text-gray-400 mb-6 border-b border-gray-700 pb-3">Покупайте улучшения, чтобы стать сильнее!</p><div id="upgrades-list-container" class="space-y-4 overflow-y-auto pr-2"></div></div></div>
-    <div id="collection-modal" class="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-[900] p-4" style="display: none;"><div class="bg-gray-800 p-6 rounded-2xl shadow-2xl w-full max-w-4xl border-t-4 border-purple-500 mx-auto max-h-[90vh] flex flex-col"><div class="flex justify-between items-center mb-4 flex-shrink-0"><div><h3 class="text-2xl font-extrabold text-white">Коллекция Питомцев</h3><p id="collection-counter" class="text-sm text-gray-400">Найдено: 0 / 0</p></div><button onclick="window.closeCollectionModal()" class="text-gray-400 hover:text-white transition-colors"><i class="fas fa-times text-2xl"></i></button></div><div id="collection-grid" class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-4 overflow-y-auto p-2 bg-gray-900 rounded-lg flex-grow"></div><div class="mt-4 flex-shrink-0"><button id="collection-reward-button" onclick="window.claimCollectionReward()" class="w-full py-3 font-bold rounded-xl transition-all shadow-lg text-lg" disabled>Забрать 22 222 Лапок</button></div></div></div>
-    
-    <!-- НОВОЕ МОДАЛЬНОЕ ОКНО: ПРЕДПРОСМОТР ПИТОМЦА -->
-    <div id="pet-preview-modal" class="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-[1000] p-4" style="display: none;" onclick="window.closePetPreview()">
+    </div><button onclick="window.closeUpdatesScreen()" class="w-full py-3 bg-blue-500 hover:bg-blue-400 font-bold rounded-xl mt-6">Начать играть!</button></div></div>
+    <div id="reset-confirm-modal" class="modal fixed inset-0 flex items-center justify-center z-[800] p-4" style="display: none;"><div class="modal-content p-8 rounded-2xl text-center shadow-2xl w-full max-w-sm border-t-4 border-red-500"><h3 class="text-2xl font-extrabold text-red-400 mb-4">Подтверждение Сброса</h3><p class="text-md mb-4">Это действие **нельзя отменить**. Чтобы подтвердить, введите <code class="bg-gray-900 text-red-400 font-mono p-1 rounded">удалить данные</code> в поле ниже.</p><input id="reset-confirm-input" type="text" class="w-full border rounded-lg p-2 text-center mb-4 focus:outline-none focus:ring-2 focus:ring-red-500" placeholder="удалить данные"><div class="flex space-x-4"><button onclick="window.closeResetConfirmation()" class="flex-1 py-3 bg-gray-600 hover:bg-gray-500 font-bold rounded-xl">Отмена</button><button id="reset-confirm-button" onclick="window.performReset()" class="flex-1 py-3 bg-red-800 text-gray-500 font-bold rounded-xl cursor-not-allowed" disabled>Сбросить</button></div></div></div>
+    <div id="sell-confirm-modal" class="modal fixed inset-0 flex items-center justify-center z-[1100]" style="display: none;"><div class="modal-content p-8 rounded-2xl text-center shadow-2xl w-full max-w-sm border-t-4 border-yellow-500"><h3 class="text-2xl font-extrabold mb-4">Подтверждение Продажи</h3><p class="text-md mb-6">Продать **<span id="sell-pet-name" class="text-yellow-400 font-bold"></span>** за <span id="sell-pet-price" class="text-green-400 font-bold">0.00</span> Лапок?</p><div class="flex space-x-4"><button onclick="document.getElementById('sell-confirm-modal').style.display='none'; window.playNavClickSound();" class="flex-1 py-3 bg-gray-600 hover:bg-gray-500 font-bold rounded-xl">Отмена</button><button id="sell-confirm-button" onclick="window.performSell()" class="flex-1 py-3 bg-green-600 hover:bg-green-500 font-bold rounded-xl">Продать</button></div></div></div>
+    <div id="upgrades-modal" class="modal fixed inset-0 flex items-center justify-center z-[800] p-4" style="display: none;"><div class="modal-content p-6 rounded-2xl shadow-2xl w-full max-w-lg border-t-4 border-yellow-500 mx-auto max-h-[90vh] flex flex-col"><div class="flex justify-between items-center mb-4"><h3 class="text-2xl font-extrabold">Улучшения</h3><button onclick="window.closeUpgradesModal()" class="hover:text-white"><i class="fas fa-times text-2xl"></i></button></div><p class="text-md mb-6 border-b pb-3">Покупайте улучшения, чтобы стать сильнее!</p><div id="upgrades-list-container" class="space-y-4 overflow-y-auto pr-2"></div></div></div>
+    <div id="collection-modal" class="modal fixed inset-0 flex items-center justify-center z-[900] p-4" style="display: none;"><div class="modal-content p-6 rounded-2xl shadow-2xl w-full max-w-4xl border-t-4 border-purple-500 mx-auto max-h-[90vh] flex flex-col"><div class="flex justify-between items-center mb-4 flex-shrink-0"><div><h3 class="text-2xl font-extrabold">Коллекция Питомцев</h3><p id="collection-counter" class="text-sm">Найдено: 0 / 0</p></div><button onclick="window.closeCollectionModal()" class="transition-colors"><i class="fas fa-times text-2xl"></i></button></div><div id="collection-grid" class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-4 overflow-y-auto p-2 rounded-lg flex-grow"></div><div class="mt-4 flex-shrink-0"><button id="collection-reward-button" onclick="window.claimCollectionReward()" class="w-full py-3 font-bold rounded-xl transition-all shadow-lg text-lg" disabled>Забрать 22 222 Лапок</button></div></div></div>
+    <div id="pet-preview-modal" class="modal fixed inset-0 flex items-center justify-center z-[1000] p-4" style="display: none;" onclick="window.closePetPreview()">
         <div id="pet-preview-content" class="p-8 rounded-2xl text-center w-full max-w-sm transition-all" onclick="event.stopPropagation()">
-            <img id="pet-preview-image" src="" alt="" class="w-32 h-32 object-cover mx-auto mb-4 rounded-xl bg-gray-700 border-4 border-gray-500">
+            <img id="pet-preview-image" src="" alt="" class="w-32 h-32 object-cover mx-auto mb-4 rounded-xl border-4 border-gray-500">
             <h3 id="pet-preview-name" class="text-3xl font-extrabold mb-1"></h3>
             <p id="pet-preview-rarity" class="text-lg mb-2"></p>
-            <p id="pet-preview-description" class="text-sm text-gray-400 mb-6 max-h-24 overflow-y-auto"></p>
-            <div id="pet-preview-buttons" class="flex space-x-4">
-                <!-- Кнопки будут добавлены динамически -->
-            </div>
-             <button onclick="window.closePetPreview()" class="w-full mt-4 py-2 bg-gray-600 hover:bg-gray-500 text-white font-bold rounded-xl">Закрыть</button>
+            <p id="pet-preview-description" class="text-sm mb-6 max-h-24 overflow-y-auto"></p>
+            <div id="pet-preview-buttons" class="flex space-x-4"></div>
+             <button onclick="window.closePetPreview()" class="w-full mt-4 py-2 bg-gray-600 hover:bg-gray-500 font-bold rounded-xl">Закрыть</button>
         </div>
     </div>
-
+    <!-- НОВЫЕ МОДАЛЬНЫЕ ОКНА ДЛЯ ТЕМ И МУЗЫКИ -->
+    <div id="theme-reward-modal" class="modal fixed inset-0 flex items-center justify-center z-[1200] p-4" style="display: none;">
+        <div class="modal-content p-8 rounded-2xl text-center shadow-2xl w-full max-w-md border-t-4 border-purple-500">
+            <h2 class="text-3xl font-extrabold text-purple-400 mb-4"><i class="fas fa-gem mr-3"></i>Награда за Коллекцию!</h2>
+            <p class="text-lg mb-6">За открытие прошлой полной коллекции вы получаете тему "Фиолетовый кристалл" и новую музыку!</p>
+            <div class="p-4 border-2 border-dashed border-purple-400 rounded-xl mb-6 bg-gray-900">
+                <p class="font-bold text-xl">Тема: Фиолетовый кристалл</p>
+                <div class="w-full h-16 mt-2 rounded-lg bg-gradient-to-br from-indigo-900 via-purple-900 to-fuchsia-900"></div>
+            </div>
+            <button onclick="window.claimThemeReward()" class="w-full py-3 bg-purple-600 hover:bg-purple-500 font-bold rounded-xl mt-6">Забрать Награду</button>
+        </div>
+    </div>
+    <div id="themes-modal" class="modal fixed inset-0 flex items-center justify-center z-[800] p-4" style="display: none;">
+        <div class="modal-content p-6 rounded-2xl shadow-2xl w-full max-w-lg border-t-4 border-purple-500 mx-auto max-h-[90vh] flex flex-col">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-2xl font-extrabold">Темы Оформления</h3>
+                <button onclick="window.closeThemesModal()"><i class="fas fa-times text-2xl"></i></button>
+            </div>
+            <div id="themes-list-container" class="space-y-4 overflow-y-auto pr-2"></div>
+        </div>
+    </div>
+    <div id="music-modal" class="modal fixed inset-0 flex items-center justify-center z-[800] p-4" style="display: none;">
+        <div class="modal-content p-6 rounded-2xl shadow-2xl w-full max-w-lg border-t-4 border-green-500 mx-auto max-h-[90vh] flex flex-col">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-2xl font-extrabold">Плейлист Музыки</h3>
+                <button onclick="window.closeMusicModal()"><i class="fas fa-times text-2xl"></i></button>
+            </div>
+            <div id="music-list-container" class="space-y-4 overflow-y-auto pr-2"></div>
+        </div>
+    </div>
 </body>
 </html>
+
