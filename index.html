@@ -659,25 +659,8 @@
         };
 
         function managePassiveLoop() {
-            // Остановка цикла, если страница неактивна, не в фокусе или игра не загружена.
-            if (!window.gameState.isDbReady || document.hidden || !document.hasFocus()) {
-                if (passiveIntervalId !== null) {
-                    clearInterval(passiveIntervalId);
-                    passiveIntervalId = null;
-                }
-                return;
-            }
-
-            // Запуск цикла только если он еще не запущен.
-            if (passiveIntervalId === null) {
-                passiveIntervalId = setInterval(() => {
-                    if (window.gameState.passiveRate > 0) {
-                        window.gameState.paws += window.gameState.passiveRate;
-                        updatePawsDisplay();
-                        savePaws(window.gameState.paws);
-                    }
-                }, PASSIVE_TICK_RATE);
-            }
+            if (!window.gameState.isDbReady || document.hidden) { if (passiveIntervalId !== null) { clearInterval(passiveIntervalId); passiveIntervalId = null; } return; }
+            if (passiveIntervalId === null) { passiveIntervalId = setInterval(() => { if (window.gameState.passiveRate > 0) { window.gameState.paws += window.gameState.passiveRate; updatePawsDisplay(); savePaws(window.gameState.paws); } }, PASSIVE_TICK_RATE); }
         }
         function handleVisibilityChange() { 
             managePassiveLoop();
@@ -1016,8 +999,6 @@
             updatePawsDisplay();
             updateAppState(true); 
             document.addEventListener('visibilitychange', handleVisibilityChange);
-            window.addEventListener('focus', managePassiveLoop);
-            window.addEventListener('blur', managePassiveLoop);
             managePassiveLoop(); 
             window.setupNavigation();
             setupUpdatesContent(); 
@@ -1560,5 +1541,4 @@
     </div>
 </body>
 </html>
-
 
