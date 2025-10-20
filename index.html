@@ -952,9 +952,15 @@
                     reelsHtml += `<div class="relative bg-gray-900 rounded-lg border-2 border-gray-700 reel-viewport-x10 overflow-hidden"><div class="reel-indicator-x10"></div><div id="x10-reel-${i}" class="case-reel w-max items-center h-full"></div></div>`;
                 }
                 container.innerHTML = reelsHtml;
+                
+                const stopOffsets = winningItems.map((item, i) => {
+                    const reel = document.getElementById(`x10-reel-${i}`);
+                    return generateReel(item, reel, true);
+                });
+
                 modal.style.display = 'flex';
 
-                setTimeout(() => {
+                requestAnimationFrame(() => {
                     let soundIntervalX10;
                     if (!isSuper) {
                          soundIntervalX10 = setInterval(() => {
@@ -965,15 +971,13 @@
 
                     winningItems.forEach((item, i) => {
                         const reel = document.getElementById(`x10-reel-${i}`);
-                        const stopOffset = generateReel(item, reel, true);
                         reel.style.transition = 'none';
                         reel.style.transform = 'translateX(0px)';
+                        reel.getBoundingClientRect(); 
                         
-                        setTimeout(() => {
-                            const duration = isSuper ? 0.8 + Math.random() * 0.4 : 5;
-                            reel.style.transition = `transform ${duration}s cubic-bezier(0.2, 0.7, 0.4, 1)`;
-                            reel.style.transform = `translateX(${stopOffset}px)`;
-                        }, 50 * (i * 0.2));
+                        const duration = isSuper ? (0.8 + Math.random() * 0.4) : (4.5 + Math.random());
+                        reel.style.transition = `transform ${duration}s cubic-bezier(0.25, 1, 0.5, 1)`;
+                        reel.style.transform = `translateX(${stopOffsets[i]}px)`;
                     });
 
                     setTimeout(() => {
@@ -982,7 +986,7 @@
                         isSpinning = false;
                         if(soundIntervalX10) clearInterval(soundIntervalX10);
                     }, spinDuration);
-                }, 50); 
+                });
             }
         };
 
@@ -1570,7 +1574,7 @@
         .glow-mega-secret { background: linear-gradient(45deg, #ffdf00, #ff00c8, #7a00ff, #002bff, #00ffd5, #48ff00, #fffb00, #ff7300); background-size: 400% 400%; animation: rainbow-bg 3s ease infinite, mega-secret-glow 1s infinite alternate; border-color: #ffdf00 !important; }
         .border-mega-secret-win { border-color: #ffdf00 !important; border-width: 4px !important; animation: mega-secret-glow 1.5s infinite alternate; box-shadow: 0 0 40px rgba(255, 165, 0, 0.8); }
         .reel-viewport { height: 100px; padding-top: 5px; overflow-x: hidden; }
-        .case-reel { display:flex; gap: 8px; }
+        .case-reel { display:flex; gap: 8px; will-change: transform; }
         .item-tile { width: 90px; height: 90px; padding: 2px; background-color: #1f2937; border-radius: 8px; box-shadow: inset 0 0 8px rgba(0,0,0,0.7); overflow: hidden; }
         .reel-indicator { position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 6px; height: 100%; background-color: #f59e0b; box-shadow: 0 0 15px #f59e0b; z-index: 20; border-radius: 3px; }
         .reel-viewport-x10 { height: 90px; }
@@ -1834,4 +1838,5 @@
     </div>
 </body>
 </html>
+
 
