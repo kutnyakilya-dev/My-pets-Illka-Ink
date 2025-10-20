@@ -14,7 +14,7 @@
     
 <script type="module">
         // --- Глобальные настройки и состояние ---
-        const CURRENT_UPDATE_VERSION = '2.5.0'; 
+        const CURRENT_UPDATE_VERSION = '3.1.0'; 
         const PASSIVE_TICK_RATE = 1000; 
         const SOUND_COOLDOWN = 150; 
         let passiveIntervalId = null; 
@@ -22,6 +22,13 @@
         let currentCaseId = 'farmer'; 
         let lastDustEffectTime = 0; 
         const DUST_EFFECT_COOLDOWN = 100;
+        
+        let isPinningMode = false;
+        let tempPinnedState = new Set();
+        let isNeonMode = false;
+        let neonSelection = [];
+        let isSpinning = false;
+
         window.gameState = {
             paws: 0.00, 
             baseClickValue: 0.09,
@@ -31,6 +38,7 @@
             passiveRate: 0.00, 
             upgrades: {
                 equippedPetsLevel: 0, 
+                clickPowerLevel: 0,
             },
             foundPets: [], 
             isCollectionRewardClaimed: false,
@@ -50,6 +58,15 @@
             equippedPets: [
                 { level: 1, cost: 2000.00, newMax: 4, name: "Дополнительное Место (I)" },
                 { level: 2, cost: 4000.00, newMax: 5, name: "Дополнительное Место (II)" },
+            ],
+            clickPower: [
+                { level: 1, cost: 40000, bonus: 1, name: "Сила Клика (I)" },
+                { level: 2, cost: 80000, bonus: 2, name: "Сила Клика (II)" },
+                { level: 3, cost: 120000, bonus: 5, name: "Сила Клика (III)" },
+                { level: 4, cost: 200000, bonus: 8, name: "Сила Клика (IV)" },
+                { level: 5, cost: 240000, bonus: 12, name: "Сила Клика (V)" },
+                { level: 6, cost: 300000, bonus: 18, name: "Сила Клика (VI)" },
+                { level: 7, cost: 650000, bonus: 25, name: "Сила Клика (VII)" },
             ]
         };
 
@@ -233,10 +250,17 @@
         };
 
         function calculateClickValue() {
-            let totalBonus = 0;
+            let totalPower = window.gameState.baseClickValue;
+            
+            const upgradeLevel = window.gameState.upgrades.clickPowerLevel;
+            if (upgradeLevel > 0) {
+                totalPower = UPGRADE_TIERS.clickPower[upgradeLevel - 1].bonus;
+            }
+
             const activePets = window.gameState.inventory.filter(pet => window.gameState.selectedPets.includes(pet.id));
-            activePets.forEach(pet => { if (pet.clickBonus) totalBonus += pet.clickBonus; });
-            return window.gameState.baseClickValue + totalBonus;
+            activePets.forEach(pet => { if (pet.clickBonus) totalPower += pet.clickBonus; });
+
+            return totalPower;
         }
 
         function calculatePassiveRate() {
@@ -256,7 +280,7 @@
         
         function updateClickValueDisplay() {
             const totalClickValue = calculateClickValue();
-            document.getElementById('click-power-display').textContent = `Сила клика: ${totalClickValue.toFixed(2)}`;
+            document.getElementById('click-power-display').textContent = `Сила клика: ${totalClickValue.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
         }
         
         function updatePawsDisplay() {
@@ -286,13 +310,14 @@
         
         function loadPaws() {
             try {
+                const defaultUpgrades = { equippedPetsLevel: 0, clickPowerLevel: 0 };
                 const loadedState = {
                     inventory: JSON.parse(localStorage.getItem('petFarmInventory')) || [],
                     selectedPets: JSON.parse(localStorage.getItem('petFarmSelectedPets')) || [],
-                    upgrades: JSON.parse(localStorage.getItem('petFarmUpgrades')) || { equippedPetsLevel: 0 },
+                    upgrades: { ...defaultUpgrades, ...(JSON.parse(localStorage.getItem('petFarmUpgrades')) || {}) },
                     foundPets: JSON.parse(localStorage.getItem('petFarmFoundPets')) || [],
                     isCollectionRewardClaimed: JSON.parse(localStorage.getItem('petFarmCollectionRewardClaimed')) || false,
-                    isThemeRewardClaimed: JSON.parse(localStorage.getItem('petFarmThemeRewardClaimed')) || false,
+                    isThemeRewardClaimed: JSON.parse(localStorage.getItem('petFarmThemeRewardClaimed')) || true, // Default to true now
                     unlockedThemes: JSON.parse(localStorage.getItem('petFarmUnlockedThemes')) || ['standard'],
                     currentTheme: localStorage.getItem('petFarmCurrentTheme') || 'standard',
                     unlockedMusic: JSON.parse(localStorage.getItem('petFarmUnlockedMusic')) || ['standard'],
@@ -303,7 +328,7 @@
                 return parseFloat(localStorage.getItem('petFarmPaws')) || 0.00;
             } catch (e) {
                 console.error("Ошибка при загрузке из LocalStorage:", e);
-                Object.assign(window.gameState, { inventory: [], selectedPets: [], upgrades: { equippedPetsLevel: 0 }, foundPets: [], isCollectionRewardClaimed: false, isThemeRewardClaimed: false, unlockedThemes: ['standard'], currentTheme: 'standard', unlockedMusic: ['standard'], musicPlaylist: ['standard'], currentMusicTrackIndex: 0 });
+                Object.assign(window.gameState, { inventory: [], selectedPets: [], upgrades: { equippedPetsLevel: 0, clickPowerLevel: 0 }, foundPets: [], isCollectionRewardClaimed: false, isThemeRewardClaimed: true, unlockedThemes: ['standard'], currentTheme: 'standard', unlockedMusic: ['standard'], musicPlaylist: ['standard'], currentMusicTrackIndex: 0 });
                 return 0.00;
             }
         }
@@ -328,14 +353,21 @@
             let inventoryChanged = false;
             const masterMap = new Map(ALL_PETS.map(item => [item.name, item]));
             window.gameState.inventory = window.gameState.inventory.map(pet => {
-                const masterItem = masterMap.get(pet.name);
+                const baseName = pet.isNeon ? pet.name.replace('Неоновый ', '') : pet.name;
+                const masterItem = masterMap.get(baseName);
                 if (masterItem) {
                     let petUpdated = false;
-                    ['passiveValue', 'border', 'color', 'rarity', 'value', 'clickBonus', 'icon', 'description'].forEach(prop => {
+                    const propsToUpdate = ['border', 'color', 'rarity', 'icon', 'description'];
+                    if(!pet.isNeon) {
+                        propsToUpdate.push('passiveValue', 'value', 'clickBonus');
+                    }
+                    propsToUpdate.forEach(prop => {
                         if (pet[prop] !== masterItem[prop]) { pet[prop] = masterItem[prop]; petUpdated = true; }
                     });
                     if (petUpdated) inventoryChanged = true;
                 }
+                if (pet.isPinned === undefined) pet.isPinned = false;
+                if (pet.isNeon === undefined) pet.isNeon = false;
                 return pet;
             });
             if (inventoryChanged) { savePaws(window.gameState.paws); showToast("✅ Инвентарь обновлен!"); }
@@ -373,7 +405,10 @@
             window.closePetPreview();
             playNavClickSound();
             const pet = window.gameState.inventory.find(p => p.id === petId);
-            if (!pet || pet.value === undefined) return showToast("Ошибка: Цена продажи не найдена.");
+            if (!pet) return;
+            if (pet.isPinned) return showToast("Закрепленных питомцев нельзя продать!");
+            if (pet.value === undefined) return showToast("Ошибка: Цена продажи не найдена.");
+            
             const modal = document.getElementById('sell-confirm-modal');
             const price = pet.value.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
             document.getElementById('sell-pet-name').textContent = pet.name;
@@ -387,9 +422,13 @@
             const petId = document.getElementById('sell-confirm-button').getAttribute('data-pet-id');
             document.getElementById('sell-confirm-modal').style.display = 'none';
             if (!petId) return showToast("Ошибка: ID питомца не найден.");
+            
             const petIndex = window.gameState.inventory.findIndex(p => p.id === petId);
             if (petIndex === -1) return showToast("Ошибка: Питомец не найден.");
+            
             const pet = window.gameState.inventory[petIndex];
+            if (pet.isPinned) return showToast("Нельзя продать закрепленного питомца.");
+
             window.gameState.paws += pet.value;
             window.gameState.selectedPets = window.gameState.selectedPets.filter(id => id !== petId);
             window.gameState.inventory.splice(petIndex, 1);
@@ -439,27 +478,68 @@
         window.closeUpgradesModal = function() { playNavClickSound(); document.getElementById('upgrades-modal').style.display = 'none'; };
         function renderUpgradesModalContent() {
             const container = document.getElementById('upgrades-list-container');
-            const currentLevel = window.gameState.upgrades.equippedPetsLevel;
-            const tiers = UPGRADE_TIERS.equippedPets;
-            let html = '';
-            tiers.forEach(tier => {
-                const isPurchased = currentLevel >= tier.level;
-                const isNext = currentLevel === tier.level - 1;
-                const costDisplay = tier.cost.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                let cardClass = 'bg-gray-700 p-4 rounded-xl flex flex-col sm:flex-row items-center justify-between transition-all duration-150';
-                let buttonClass = 'py-2 px-4 rounded-lg font-bold transition-colors shadow-lg w-full sm:w-auto mt-3 sm:mt-0';
-                let buttonText, buttonDisabled = false;
-                if (isPurchased) { cardClass += ' border-l-4 border-green-500 opacity-75'; buttonClass += ' bg-green-700 text-gray-400 cursor-not-allowed'; buttonText = 'Куплено'; buttonDisabled = true; } 
-                else if (isNext) {
-                    const canAfford = window.gameState.paws >= tier.cost;
-                    if (canAfford) { cardClass += ' border-l-4 border-yellow-500'; buttonClass += ' bg-yellow-500 hover:bg-yellow-400 text-gray-900'; buttonText = `Купить за ${costDisplay}`; } 
-                    else { cardClass += ' border-l-4 border-red-500 opacity-70'; buttonClass += ' bg-red-700 text-gray-500 cursor-not-allowed'; buttonText = `Не хватает (${costDisplay})`; buttonDisabled = true; }
-                } else { cardClass += ' border-l-4 border-gray-600 opacity-50'; buttonClass += ' bg-gray-600 text-gray-400 cursor-not-allowed'; buttonText = 'Заблокировано'; buttonDisabled = true; }
-                const currentLimit = getMaxSelectedPets(), nextLimit = tier.newMax;
-                html += `<div class="${cardClass}"><div class="flex flex-col flex-grow text-center sm:text-left"><p class="text-xl font-bold text-white">${tier.name}</p><p class="text-sm text-gray-400 mt-1">Лимит: <span class="text-blue-400">${currentLimit}</span> → <span class="text-yellow-400">${nextLimit}</span></p>${isPurchased ? `<p class="text-xs text-green-400 mt-2 font-bold">Активно.</p>` : ''}</div><button onclick="window.buyUpgrade('equippedPets', ${tier.level})" class="${buttonClass} ml-0 sm:ml-4 whitespace-nowrap" ${buttonDisabled ? 'disabled' : ''}>${buttonText}</button></div>`;
-            });
-            if (currentLevel === tiers.length) html += `<div class="p-4 bg-gray-800 rounded-xl text-center mt-4 border-2 border-dashed border-blue-500"><p class="text-lg font-bold text-blue-400">✅ Все улучшения куплены!</p><p class="text-sm text-gray-400">Максимальный лимит: ${getMaxSelectedPets()} питомцев.</p></div>`;
-            container.innerHTML = html;
+            container.innerHTML = ''; // Clear previous content
+
+            const renderTierGroup = (upgradeType, title) => {
+                const currentLevel = window.gameState.upgrades[`${upgradeType}Level`];
+                const tiers = UPGRADE_TIERS[upgradeType];
+                if (!tiers) return;
+
+                let html = `<div class="mb-6"><h4 class="text-xl font-bold text-yellow-300 border-b-2 border-yellow-300/50 pb-2 mb-4">${title}</h4><div class="space-y-3">`;
+
+                tiers.forEach(tier => {
+                    const isPurchased = currentLevel >= tier.level;
+                    const isNext = currentLevel === tier.level - 1;
+                    const costDisplay = tier.cost.toLocaleString('ru-RU');
+                    
+                    let cardClass = 'bg-gray-700 p-3 rounded-xl flex flex-col sm:flex-row items-center justify-between transition-all duration-150';
+                    let buttonClass = 'py-2 px-4 rounded-lg font-bold transition-colors shadow-lg w-full sm:w-auto mt-3 sm:mt-0 text-white';
+                    let buttonText = 'Купить', buttonDisabled = false;
+
+                    if (isPurchased) {
+                        cardClass += ' border-l-4 border-green-500 opacity-75';
+                        buttonClass += ' bg-green-700 cursor-not-allowed';
+                        buttonText = 'Куплено';
+                        buttonDisabled = true;
+                    } else if (isNext) {
+                        const canAfford = window.gameState.paws >= tier.cost;
+                        cardClass += canAfford ? ' border-l-4 border-blue-400' : ' border-l-4 border-red-500 opacity-80';
+                        buttonClass += canAfford ? ' bg-blue-500 hover:bg-blue-400' : ' bg-red-600 hover:bg-red-500';
+                    } else {
+                        cardClass += ' border-l-4 border-gray-600 opacity-50';
+                        buttonClass += ' bg-gray-600 cursor-not-allowed';
+                        buttonText = 'Заблокировано';
+                        buttonDisabled = true;
+                    }
+                    
+                    let description = '';
+                    if (upgradeType === 'equippedPets') {
+                        description = `Лимит: <span class="font-semibold ${isPurchased ? 'text-gray-400' : 'text-yellow-400'}">${tier.newMax} питомцев</span>`;
+                    } else if (upgradeType === 'clickPower') {
+                        description = `Сила клика станет: <span class="font-semibold ${isPurchased ? 'text-gray-400' : 'text-yellow-400'}">${tier.bonus.toLocaleString('ru-RU')}</span>`;
+                    }
+
+                    html += `<div class="${cardClass}">
+                                <div class="flex-grow text-center sm:text-left">
+                                    <p class="text-lg font-bold text-white">${tier.name}</p>
+                                    <p class="text-sm text-gray-300 mt-1">${description}</p>
+                                    <p class="text-sm font-bold text-green-400 mt-1">Цена: ${costDisplay} Лапок</p>
+                                </div>
+                                <button onclick="window.buyUpgrade('${upgradeType}', ${tier.level})" class="${buttonClass} ml-0 sm:ml-4 whitespace-nowrap" ${buttonDisabled ? 'disabled' : ''}>${buttonText}</button>
+                             </div>`;
+                });
+                
+                const allBought = currentLevel === tiers.length;
+                if(allBought){
+                    html += `<div class="p-3 bg-gray-800 rounded-xl text-center mt-3 border-2 border-dashed border-green-500"><p class="text-md font-bold text-green-400">✅ Все улучшения этого типа куплены!</p></div>`
+                }
+
+                html += '</div></div>';
+                container.innerHTML += html;
+            };
+
+            renderTierGroup('equippedPets', 'Места для Питомцев');
+            renderTierGroup('clickPower', 'Сила Клика');
         }
         window.buyUpgrade = function(upgradeType, level) {
             playNavClickSound();
@@ -470,9 +550,8 @@
             window.gameState.upgrades[`${upgradeType}Level`] = level;
             savePaws(window.gameState.paws);
             updatePawsDisplay();
-            renderInventory();
             renderUpgradesModalContent();
-            showToast(`🎉 Успешно! Лимит питомцев увеличен до ${tier.newMax}!`);
+            showToast(`🎉 Успешно! Улучшение "${tier.name}" куплено!`);
         };
         
         function getIconHtml(item, isLarge = false, isReel = false, isPreview = false, isWinModal = false) {
@@ -486,14 +565,207 @@
              let marginClass = isReel || isWinModal ? '' : (isLarge ? 'mr-4 flex-shrink-0' : 'mr-3');
              return `<img src="${iconUrl}" alt="${item.name}" class="${sizeClass} object-cover bg-gray-700 ${marginClass} rounded-lg" onerror="this.onerror=null;this.src='https://placehold.co/40x40/374151/fff?text=?';">`;
         }
+
+        window.startPinning = function() {
+            playNavClickSound();
+            isPinningMode = true;
+            tempPinnedState = new Set(window.gameState.inventory.filter(p => p.isPinned).map(p => p.id));
+            const controls = document.getElementById('inventory-controls');
+            document.getElementById('controls-text').textContent = 'Выберите питомцев, которых хотите закрепить.';
+            document.getElementById('controls-buttons').innerHTML = `
+                <button onclick="window.applyPinning()" class="px-4 py-2 bg-green-600 hover:bg-green-500 rounded-lg font-bold">Применить</button>
+                <button onclick="window.cancelPinning()" class="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded-lg font-bold">Отмена</button>
+            `;
+            controls.style.display = 'block';
+            renderInventory();
+        };
+
+        window.toggleTempPin = function(petId) {
+            playNavClickSound();
+            if (tempPinnedState.has(petId)) {
+                tempPinnedState.delete(petId);
+            } else {
+                tempPinnedState.add(petId);
+            }
+            renderInventory();
+        };
+
+        window.applyPinning = function() {
+            playNavClickSound();
+            window.gameState.inventory.forEach(pet => {
+                pet.isPinned = tempPinnedState.has(pet.id);
+            });
+            isPinningMode = false;
+            document.getElementById('inventory-controls').style.display = 'none';
+            savePaws(window.gameState.paws);
+            renderInventory();
+            showToast("✅ Закрепленные питомцы сохранены!");
+        };
+
+        window.cancelPinning = function() {
+            playNavClickSound();
+            isPinningMode = false;
+            document.getElementById('inventory-controls').style.display = 'none';
+            renderInventory();
+        };
+
+        window.startNeonMode = function() {
+            playNavClickSound();
+            isNeonMode = true;
+            neonSelection = [];
+            const controls = document.getElementById('inventory-controls');
+            document.getElementById('controls-text').textContent = 'Выберите 4 одинаковых питомца для соединения.';
+            document.getElementById('controls-buttons').innerHTML = `
+                <button id="combine-neon-btn" onclick="window.combineNeonPets()" class="px-4 py-2 bg-green-600 hover:bg-green-500 rounded-lg font-bold opacity-50 cursor-not-allowed" disabled>Соединить (0/4)</button>
+                <button onclick="window.exitNeonMode()" class="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded-lg font-bold">Выйти</button>
+            `;
+            controls.style.display = 'block';
+            renderInventory();
+        };
+        
+        window.exitNeonMode = function() {
+            playNavClickSound();
+            isNeonMode = false;
+            document.getElementById('inventory-controls').style.display = 'none';
+            renderInventory();
+        };
+
+        window.selectForNeon = function(petId) {
+            playNavClickSound();
+            const pet = window.gameState.inventory.find(p => p.id === petId);
+            if (!pet) return;
+            
+            const selectedIndex = neonSelection.indexOf(petId);
+            if (selectedIndex > -1) {
+                neonSelection.splice(selectedIndex, 1);
+            } else {
+                if (neonSelection.length > 0) {
+                    const firstSelectedPet = window.gameState.inventory.find(p => p.id === neonSelection[0]);
+                    if (pet.name !== firstSelectedPet.name) {
+                        return showToast("Можно соединять только одинаковых питомцев.");
+                    }
+                }
+                if (neonSelection.length < 4) {
+                    neonSelection.push(petId);
+                } else {
+                    return showToast("Вы уже выбрали 4 питомцев.");
+                }
+            }
+            
+            const combineBtn = document.getElementById('combine-neon-btn');
+            if (combineBtn) {
+                 combineBtn.textContent = `Соединить (${neonSelection.length}/4)`;
+                 if (neonSelection.length === 4) {
+                    combineBtn.disabled = false;
+                    combineBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                 } else {
+                    combineBtn.disabled = true;
+                    combineBtn.classList.add('opacity-50', 'cursor-not-allowed');
+                 }
+            }
+            renderInventory();
+        };
+
+        window.combineNeonPets = function() {
+            playNavClickSound();
+            if (neonSelection.length !== 4) return showToast("Нужно выбрать ровно 4 питомцев.");
+            
+            const basePet = window.gameState.inventory.find(p => p.id === neonSelection[0]);
+            if (!basePet) return;
+            
+            const newNeonPet = {
+                ...basePet,
+                id: crypto.randomUUID(),
+                date: new Date().toISOString(),
+                isNeon: true,
+                isPinned: false, 
+                name: `Неоновый ${basePet.name}`,
+                passiveValue: basePet.passiveValue * 2.40,
+                value: basePet.value * 5,
+            };
+
+            window.gameState.inventory = window.gameState.inventory.filter(p => !neonSelection.includes(p.id));
+            window.gameState.inventory.push(newNeonPet);
+            
+            showToast(`✨ Поздравляем! Вы создали: ${newNeonPet.name}!`);
+            exitNeonMode();
+            savePaws(window.gameState.paws);
+            updatePawsDisplay();
+        };
+
+        window.showAutoSellConfirmation = function() {
+            playNavClickSound();
+            const petsToSell = window.gameState.inventory.filter(p => !p.isPinned);
+            if (petsToSell.length === 0) {
+                return showToast("Нет питомцев для продажи (все закреплены или инвентарь пуст).");
+            }
+            document.getElementById('auto-sell-confirm-modal').style.display = 'flex';
+        };
+        
+        window.performAutoSell = function() {
+            playNavClickSound();
+            document.getElementById('auto-sell-confirm-modal').style.display = 'none';
+            const petsToSell = window.gameState.inventory.filter(p => !p.isPinned);
+            if (petsToSell.length === 0) return;
+
+            const totalValue = petsToSell.reduce((sum, p) => sum + p.value, 0);
+            window.gameState.inventory = window.gameState.inventory.filter(p => p.isPinned);
+            
+            const soldPetIds = new Set(petsToSell.map(p => p.id));
+            window.gameState.selectedPets = window.gameState.selectedPets.filter(id => !soldPetIds.has(id));
+
+            window.gameState.paws += totalValue;
+
+            showToast(`💰 Продано ${petsToSell.length} питомцев за ${totalValue.toLocaleString('ru-RU', { minimumFractionDigits: 2 })} Лапок!`);
+            savePaws(window.gameState.paws);
+            updatePawsDisplay();
+            renderInventory();
+        };
+
         function renderInventory() {
             const inventoryContainer = document.getElementById('inventory-container');
             const emptyState = document.getElementById('inventory-empty-state');
             document.getElementById('active-pets-count').textContent = `Активных: ${window.gameState.selectedPets.length} / ${getMaxSelectedPets()}`;
-            if (window.gameState.inventory.length === 0) { emptyState.style.display = 'flex'; inventoryContainer.innerHTML = ''; return; }
+            
+            let petsToRender = window.gameState.inventory;
+            
+            if (isNeonMode) {
+                const counts = window.gameState.inventory
+                    .filter(p => !p.isNeon && !p.isPinned)
+                    .reduce((acc, pet) => {
+                        acc[pet.name] = (acc[pet.name] || 0) + 1;
+                        return acc;
+                    }, {});
+                const eligibleNames = Object.keys(counts).filter(name => counts[name] >= 4);
+                petsToRender = window.gameState.inventory.filter(p => (eligibleNames.includes(p.name) && !p.isNeon && !p.isPinned) || p.isNeon);
+            }
+
+            if (petsToRender.length === 0 && window.gameState.inventory.length > 0 && isNeonMode) {
+                 emptyState.style.display = 'flex';
+                 emptyState.querySelector('p.text-xl').textContent = 'Нет питомцев для неона!';
+                 emptyState.querySelector('p.text-sm').textContent = 'Нужно 4 одинаковых незакрепленных питомца.';
+                 inventoryContainer.innerHTML = '';
+                 return;
+            } else if (window.gameState.inventory.length === 0) {
+                 emptyState.style.display = 'flex';
+                 emptyState.querySelector('p.text-xl').textContent = 'Инвентарь пуст!';
+                 emptyState.querySelector('p.text-sm').textContent = 'Открой кейсы, чтобы найти животных.';
+                 inventoryContainer.innerHTML = '';
+                 return;
+            }
+
             emptyState.style.display = 'none';
-            inventoryContainer.innerHTML = [...window.gameState.inventory].reverse().map(item => {
+            inventoryContainer.innerHTML = [...petsToRender].reverse().map(item => {
+                let mainDivOnClick;
+                if(isPinningMode) mainDivOnClick = `onclick="window.toggleTempPin('${item.id}')"`;
+                else if (isNeonMode && !item.isNeon && !item.isPinned) mainDivOnClick = `onclick="window.selectForNeon('${item.id}')"`;
+                else mainDivOnClick = `onclick="window.showPetPreview('${item.id}', 'inventory')"`;
+                
                 const isSelected = window.gameState.selectedPets.includes(item.id);
+                const isTempPinned = isPinningMode && tempPinnedState.has(item.id);
+                const isActuallyPinned = !isPinningMode && item.isPinned;
+                const isNeonSelected = isNeonMode && neonSelection.includes(item.id);
+
                 const hasBonus = item.passiveValue > 0 || item.clickBonus > 0;
                 let buttonClass = 'py-1 px-3 rounded-lg text-sm font-semibold transition-colors';
                 let buttonText = 'Выбрать';
@@ -501,14 +773,37 @@
                 else if (hasBonus && window.gameState.selectedPets.length < getMaxSelectedPets()) { buttonClass += ' bg-green-600 hover:bg-green-500'; } 
                 else if (hasBonus) { buttonClass += ' bg-gray-600 cursor-not-allowed opacity-70'; buttonText = 'Лимит'; }
                 else { buttonClass += ' bg-gray-600 cursor-not-allowed opacity-50'; buttonText = 'Нет бонусов'; }
-                const sellButton = item.value > 0 ? `<button onclick="window.showSellConfirmation('${item.id}')" class="py-1 px-3 rounded-lg text-sm font-semibold transition-colors bg-gray-500 hover:bg-gray-400">Продать (${item.value.toLocaleString('ru-RU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })})</button>` : '';
+                const sellButtonDisabled = item.isPinned;
+                const sellButton = item.value > 0 ? `<button onclick="window.showSellConfirmation('${item.id}')" class="py-1 px-3 rounded-lg text-sm font-semibold transition-colors bg-gray-500 hover:bg-gray-400 ${sellButtonDisabled ? 'opacity-50 cursor-not-allowed' : ''}" ${sellButtonDisabled ? 'disabled' : ''}>Продать (${item.value.toLocaleString('ru-RU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })})</button>` : '';
                 const passiveInfo = item.passiveValue > 0 ? `<p class="text-xs text-green-400 mt-1 font-bold">Доход: +${item.passiveValue.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/с</p>` : '';
                 const clickInfo = item.clickBonus > 0 ? `<p class="text-xs text-blue-400 mt-1 font-bold">Клик: +${item.clickBonus.toFixed(2)}</p>` : '';
                 const noBonusInfo = !passiveInfo && !clickInfo ? `<p class="text-xs text-gray-500 mt-1">Не дает бонусов</p>` : '';
                 const secretClass = (item.rarity === "Секретный" || item.rarity === "Мега Секретный") ? 'inventory-item-secret' : '';
-                return `<div class="inventory-item p-4 rounded-xl flex items-center justify-between shadow-lg border-l-4 ${item.border.replace('border-', 'border-l-')} ${secretClass}"><div class="flex items-center flex-grow cursor-pointer" onclick="window.showPetPreview('${item.id}', 'inventory')">${getIconHtml(item, true)}<div class="flex-grow"><p class="text-lg font-bold ${item.color}">${item.name}</p><p class="text-sm text-gray-400">${item.rarity}</p>${passiveInfo}${clickInfo}${noBonusInfo}</div></div><div class="text-right flex-shrink-0 ml-4 flex flex-col space-y-2"><button onclick="window.togglePetSelection('${item.id}')" class="${buttonClass}" ${(!hasBonus || (!isSelected && window.gameState.selectedPets.length >= getMaxSelectedPets())) ? 'disabled' : ''}>${buttonText}</button>${sellButton}<p class="text-xs text-gray-500 mt-2">${new Date(item.date).toLocaleDateString('ru-RU')}</p></div></div>`;
+                
+                const lockIcon = isTempPinned || isActuallyPinned ? `<i class="fas fa-lock text-yellow-400 absolute top-2 left-2 z-10 text-lg" style="text-shadow: 0 0 5px black;"></i>` : '';
+                const neonText = item.isNeon ? `<p class="absolute top-1 left-2 text-xs font-black text-green-300 neon-text-glow bg-black/50 px-2 py-0.5 rounded">НЕОН</p>` : '';
+                let extraCardClasses = '';
+                if(isNeonSelected) extraCardClasses = 'ring-4 ring-green-400';
+
+                return `<div class="relative inventory-item p-4 rounded-xl flex items-center justify-between shadow-lg border-l-4 ${item.border.replace('border-', 'border-l-')} ${secretClass} ${extraCardClasses}">
+                    ${lockIcon}${neonText}
+                    <div class="flex items-center flex-grow cursor-pointer" ${mainDivOnClick}>
+                        ${getIconHtml(item, true)}
+                        <div class="flex-grow">
+                            <p class="text-lg font-bold ${item.color}">${item.name}</p>
+                            <p class="text-sm text-gray-400">${item.rarity}</p>
+                            ${passiveInfo}${clickInfo}${noBonusInfo}
+                        </div>
+                    </div>
+                    <div class="text-right flex-shrink-0 ml-4 flex flex-col space-y-2">
+                        <button onclick="window.togglePetSelection('${item.id}')" class="${buttonClass}" ${(!hasBonus || (!isSelected && window.gameState.selectedPets.length >= getMaxSelectedPets())) ? 'disabled' : ''}>${buttonText}</button>
+                        ${sellButton}
+                        <p class="text-xs text-gray-500 mt-2">${new Date(item.date).toLocaleDateString('ru-RU')}</p>
+                    </div>
+                </div>`;
             }).join('');
         }
+
         function renderCasePreview(caseId) {
             const previewContainer = document.getElementById('case-preview-container');
             previewContainer.innerHTML = '';
@@ -529,24 +824,32 @@
             for (const item of caseData.items) { if (random < item.weight) return item; random -= item.weight; }
             return caseData.items[0]; 
         }
-        function generateReel(winningItem) {
-            const reel = document.getElementById('case-reel');
-            reel.innerHTML = '';
+        function generateReel(winningItem, reelElement, isX10 = false) {
+            reelElement.innerHTML = '';
             const items = Array.from({ length: 75 }, () => getWeightedRandomItem(currentCaseId));
             items.push(winningItem); 
             items.push(...Array.from({ length: 15 }, () => getWeightedRandomItem(currentCaseId)));
-            const itemWidthTotal = 98, itemWidth = 90; 
-            const stopOffset = (document.querySelector('.reel-viewport').clientWidth / 2) - (75 * itemWidthTotal + (itemWidth / 2));
+            
+            const itemWidth = isX10 ? 80 : 90;
+            const itemGap = 8;
+            const itemWidthTotal = itemWidth + itemGap;
+
             items.forEach(item => {
                 let tileClass = `item-tile flex-shrink-0 flex flex-col items-center justify-center rounded-lg border-2 ${item.border}`;
                 if (item.isMegaSecret) tileClass += ' glow-mega-secret';
-                reel.innerHTML += `<div class="${tileClass}">${getIconHtml(item, false, true, true)}</div>`;
+                reelElement.innerHTML += `<div class="${tileClass}" style="width: ${itemWidth}px; height: ${itemWidth}px;">${getIconHtml(item, false, true, true)}</div>`;
             });
+            const stopOffset = (reelElement.parentElement.clientWidth / 2) - (75 * itemWidthTotal + (itemWidth / 2));
             return stopOffset;
         }
-        window.closeWinModal = function() { playNavClickSound(); document.getElementById('win-notification-modal').style.display = 'none'; window.showCaseDetails(currentCaseId, true); };
+        window.closeWinModal = function() { 
+            playNavClickSound(); 
+            document.getElementById('win-notification-modal').style.display = 'none'; 
+            isSpinning = false;
+            window.showCaseDetails(currentCaseId, true); 
+        };
         window.showWinModal = function(itemData) {
-            const newItem = { ...itemData, date: new Date().toISOString(), id: crypto.randomUUID() };
+            const newItem = { ...itemData, date: new Date().toISOString(), id: crypto.randomUUID(), isPinned: false, isNeon: false };
             if (!window.gameState.foundPets.includes(newItem.name)) { window.gameState.foundPets.push(newItem.name); }
             window.gameState.inventory.push(newItem);
             savePaws(window.gameState.paws);
@@ -564,68 +867,118 @@
             modal.style.display = 'flex';
         };
         
-        window.startCaseSpin = function() {
+        window.startCaseSpin = function(count = 1) {
             playMusic();
+            if (isSpinning) return showToast("Подождите, открытие уже идет...");
             const caseData = CASES[currentCaseId];
-            if (!caseData) { return showToast("Ошибка: Данные кейса не найдены. Попробуйте перезайти."); }
-            if (!window.gameState.isDbReady) { return showToast("Подождите, игра еще загружается..."); }
-            if (window.gameState.paws < caseData.cost) { return showToast(`Не хватает ${caseData.cost.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Лапок!`); }
+            if (!caseData) return showToast("Ошибка: Данные кейса не найдены.");
+            if (!window.gameState.isDbReady) return showToast("Подождите, игра еще загружается...");
+            
+            const totalCost = caseData.cost * count;
+            if (window.gameState.paws < totalCost) {
+                showToast(`Недостаточно Лапок! Нужно ${totalCost.toLocaleString('ru-RU')} `);
+                return;
+            }
 
-            window.gameState.paws -= caseData.cost;
+            isSpinning = true;
+            window.gameState.paws -= totalCost;
             savePaws(window.gameState.paws);
             updatePawsDisplay();
-            const openButton = document.getElementById('open-case-button'); 
-            openButton.disabled = true;
-            openButton.textContent = 'Крутим...';
-            const winningItem = getWeightedRandomItem(currentCaseId);
-            const stopOffset = generateReel(winningItem);
-            const reel = document.getElementById('case-reel');
-            reel.style.transition = 'none';
-            reel.style.transform = 'translateX(0px)';
+            
+            if (count === 1) {
+                const openButton = document.getElementById('open-case-button-1');
+                const openButton10 = document.getElementById('open-case-button-10');
+                if(openButton) openButton.disabled = true;
+                if(openButton10) openButton10.disabled = true;
+                window.showCaseDetails(currentCaseId, true); // Update button colors to gray
 
-            setTimeout(() => {
-                reel.style.transition = 'transform 5s cubic-bezier(0.2, 0.7, 0.4, 1)';
-                reel.style.transform = `translateX(${stopOffset}px)`;
-
-                const itemWidthTotal = 98;
-                let lastItemIndex = -1;
-                const viewportCenterOffset = document.querySelector('.reel-viewport')?.clientWidth / 2 || 0;
+                const winningItem = getWeightedRandomItem(currentCaseId);
+                const reel = document.getElementById('case-reel');
+                const stopOffset = generateReel(winningItem, reel, false);
                 
-                const tickInterval = setInterval(() => {
-                    const reelEl = document.getElementById('case-reel');
-                    if (!reelEl) {
-                        clearInterval(tickInterval);
-                        return;
-                    }
-                    
-                    const style = window.getComputedStyle(reelEl);
-                    if (!style.transform || style.transform === 'none') return;
-                    
-                    try {
-                        const matrix = new DOMMatrix(style.transform);
-                        const currentX = Math.abs(matrix.m41);
-                        const centeredItemX = currentX + viewportCenterOffset;
-                        const currentItemIndex = Math.floor(centeredItemX / itemWidthTotal);
-
-                        if (currentItemIndex > lastItemIndex) {
-                            lastItemIndex = currentItemIndex;
-                            if (reelTickSynth && Tone.context.state === 'running') {
-                                reelTickSynth.triggerAttackRelease('C6', '8n');
-                            }
-                        }
-                    } catch (e) {
-                       // Failsafe for DOMMatrix parsing
-                    }
-                }, 65);
+                reel.style.transition = 'none';
+                reel.style.transform = 'translateX(0px)';
 
                 setTimeout(() => {
-                    clearInterval(tickInterval);
-                    openButton.disabled = false;
-                    window.showWinModal(winningItem);
-                }, 5050);
+                    reel.style.transition = 'transform 5s cubic-bezier(0.2, 0.7, 0.4, 1)';
+                    reel.style.transform = `translateX(${stopOffset}px)`;
 
-            }, 50);
+                    const soundInterval = setInterval(() => {
+                        if (!isSpinning) { clearInterval(soundInterval); return; }
+                        try { if (reelTickSynth && Tone.context.state === 'running') { reelTickSynth.triggerAttackRelease('C6', '16n', Tone.now()); } } catch(e) {}
+                    }, 100);
+
+                    setTimeout(() => {
+                        clearInterval(soundInterval);
+                        window.showWinModal(winningItem);
+                    }, 5050);
+                }, 50);
+
+            } else if (count === 10) {
+                window.showCaseDetails(currentCaseId, true);
+                const modal = document.getElementById('x10-spin-modal');
+                const container = document.getElementById('x10-reels-container');
+                container.innerHTML = '';
+                const winningItems = Array.from({ length: 10 }, () => getWeightedRandomItem(currentCaseId));
+                
+                for(let i = 0; i < 10; i++) {
+                    container.innerHTML += `<div class="relative bg-gray-900 rounded-lg border-2 border-gray-700 reel-viewport-x10 overflow-hidden"><div class="reel-indicator-x10"></div><div id="x10-reel-${i}" class="case-reel w-max items-center h-full"></div></div>`;
+                }
+                modal.style.display = 'flex';
+
+                const soundIntervalX10 = setInterval(() => {
+                    if (!isSpinning) { clearInterval(soundIntervalX10); return; }
+                    try { if (reelTickSynth && Tone.context.state === 'running') { reelTickSynth.triggerAttackRelease('C7', '16n', Tone.now()); } } catch(e) {}
+                }, 120);
+
+                setTimeout(() => {
+                    winningItems.forEach((item, i) => {
+                        const reel = document.getElementById(`x10-reel-${i}`);
+                        const stopOffset = generateReel(item, reel, true);
+                        reel.style.transition = 'none';
+                        reel.style.transform = 'translateX(0px)';
+                        setTimeout(() => {
+                            const duration = 4 + Math.random() * 2;
+                            reel.style.transition = `transform ${duration}s cubic-bezier(0.2, 0.7, 0.4, 1)`;
+                            reel.style.transform = `translateX(${stopOffset}px)`;
+                        }, 50);
+                    });
+                }, 100);
+
+                setTimeout(() => {
+                    modal.style.display = 'none';
+                    showX10WinModal(winningItems);
+                    isSpinning = false;
+                    clearInterval(soundIntervalX10);
+                }, 6500);
+            }
         };
+
+        function showX10WinModal(items) {
+            items.forEach(itemData => {
+                 const newItem = { ...itemData, date: new Date().toISOString(), id: crypto.randomUUID(), isPinned: false, isNeon: false };
+                 if (!window.gameState.foundPets.includes(newItem.name)) window.gameState.foundPets.push(newItem.name);
+                 window.gameState.inventory.push(newItem);
+            });
+            savePaws(window.gameState.paws);
+            updatePawsDisplay();
+
+            const modal = document.getElementById('x10-win-modal');
+            const grid = document.getElementById('x10-win-grid');
+            grid.innerHTML = '';
+            items.forEach(item => {
+                grid.innerHTML += `<div class="relative flex flex-col items-center justify-center p-2 rounded-lg bg-gray-700 border-2 ${item.border}">
+                    <img src="${item.icon}" alt="${item.name}" class="w-16 h-16 object-cover rounded-md" onerror="this.onerror=null;this.src='https://placehold.co/60x60/374151/fff?text=?';">
+                    <p class="mt-2 text-xs font-bold ${item.color} text-center truncate w-full">${item.name}</p>
+                </div>`;
+            });
+            modal.style.display = 'flex';
+        }
+        window.closeX10WinModal = function() {
+            playNavClickSound();
+            document.getElementById('x10-win-modal').style.display = 'none';
+            window.showCaseDetails(currentCaseId, true);
+        }
 
         window.showCaseDetails = function(caseId, skipSectionChange = false) {
             currentCaseId = caseId;
@@ -635,25 +988,34 @@
             playMusic(); 
             document.getElementById('case-details-title').textContent = caseData.name;
             renderCasePreview(caseId);
-            const openButton = document.getElementById('open-case-button'); 
-            openButton.onclick = window.startCaseSpin;
-            const canAfford = window.gameState.paws >= caseData.cost;
-            openButton.classList.remove('bg-red-500', 'hover:bg-red-400', 'bg-blue-500', 'hover:bg-blue-400', 'opacity-50', 'cursor-not-allowed');
-            const costText = `${caseData.cost.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Лапок`;
-            if (canAfford) {
-                openButton.textContent = `Открыть Кейс (${costText})`;
-                openButton.classList.add('bg-blue-500', 'hover:bg-blue-400');
-                openButton.disabled = false;
-            } else {
-                openButton.textContent = `Недостаточно Лапок (${costText})`;
-                openButton.classList.add('bg-red-500', 'hover:bg-red-400', 'opacity-70', 'cursor-not-allowed');
-                openButton.disabled = true;
-            }
+            
+            const openBtn1 = document.getElementById('open-case-button-1');
+            const openBtn10 = document.getElementById('open-case-button-10');
+            const cost1 = caseData.cost;
+            const cost10 = cost1 * 10;
+            
+            const setupButton = (btn, cost) => {
+                const canAfford = window.gameState.paws >= cost;
+                btn.classList.remove('bg-red-600', 'hover:bg-red-500', 'bg-blue-500', 'hover:bg-blue-400', 'bg-gray-500');
+                btn.disabled = isSpinning;
+                if (isSpinning) {
+                    btn.classList.add('bg-gray-500');
+                } else if(canAfford) {
+                    btn.classList.add('bg-blue-500', 'hover:bg-blue-400');
+                } else {
+                    btn.classList.add('bg-red-600', 'hover:bg-red-500');
+                }
+            };
+
+            setupButton(openBtn1, cost1);
+            setupButton(openBtn10, cost10);
+            document.getElementById('open-case-cost-1').textContent = `${cost1.toLocaleString('ru-RU')} Лапок`;
+            document.getElementById('open-case-cost-10').textContent = `${cost10.toLocaleString('ru-RU')} Лапок`;
+            
             if (!skipSectionChange) {
                 window.setupNavigation().showSection('case-details');
                 const reel = document.getElementById('case-reel');
-                reel.style.transition = 'none';
-                generateReel(caseData.items[0]); 
+                generateReel(caseData.items[0], reel, false); 
                 reel.style.transform = 'translateX(0px)';
             }
         };
@@ -679,31 +1041,24 @@
             const button = document.getElementById('click-button');
             const rect = button.getBoundingClientRect();
             const container = document.getElementById('dust-container');
-            const particleCount = 15; // Уменьшено с 30 для оптимизации
+            const particleCount = 15;
             const startX = rect.left + rect.width / 2;
             const startY = rect.top + rect.height / 2;
 
             for (let i = 0; i < particleCount; i++) {
                 const dust = document.createElement('div');
                 dust.className = 'dust-particle';
-                
                 dust.style.left = `${startX}px`;
                 dust.style.top = `${startY}px`;
-
                 const angle = Math.random() * 2 * Math.PI;
                 const distance = Math.random() * 50 + 50; 
-
                 const endX = Math.cos(angle) * distance;
                 const endY = Math.sin(angle) * distance;
-
                 dust.style.setProperty('--dust-x-end', `${endX}px`);
                 dust.style.setProperty('--dust-y-end', `${endY}px`);
                 dust.style.setProperty('--dust-duration', `${0.6 + Math.random() * 0.4}s`);
-
                 container.appendChild(dust);
-                dust.addEventListener('animationend', () => {
-                    dust.remove();
-                });
+                dust.addEventListener('animationend', () => dust.remove());
             }
         }
         function performPawsClick() {
@@ -819,7 +1174,9 @@
                 }
 
                 buttonsContainer.innerHTML += `<button onclick="window.togglePetSelection('${petData.id}')" class="${selectButtonClass}" ${selectButtonDisabled ? 'disabled' : ''}>${selectButtonText}</button>`;
-                buttonsContainer.innerHTML += `<button onclick="window.showSellConfirmation('${petData.id}')" class="flex-1 py-3 bg-yellow-600 hover:bg-yellow-500 text-white font-bold rounded-xl transition-colors">Продать</button>`;
+                
+                const sellButtonDisabled = petData.isPinned;
+                buttonsContainer.innerHTML += `<button onclick="window.showSellConfirmation('${petData.id}')" class="flex-1 py-3 bg-yellow-600 hover:bg-yellow-500 text-white font-bold rounded-xl transition-colors ${sellButtonDisabled ? 'opacity-50 cursor-not-allowed' : ''}" ${sellButtonDisabled ? 'disabled' : ''}>Продать</button>`;
             }
 
             modal.style.display = 'flex';
@@ -954,26 +1311,6 @@
             savePaws(window.gameState.paws);
         }
 
-        window.claimThemeReward = function() {
-            playNavClickSound();
-            if(window.gameState.isThemeRewardClaimed) return;
-
-            window.gameState.isThemeRewardClaimed = true;
-            if(!window.gameState.unlockedThemes.includes('purple_crystal')) {
-                window.gameState.unlockedThemes.push('purple_crystal');
-            }
-            if(!window.gameState.unlockedMusic.includes('crystal')) {
-                window.gameState.unlockedMusic.push('crystal');
-                if(!window.gameState.musicPlaylist.includes('crystal')) {
-                    window.gameState.musicPlaylist.push('crystal');
-                }
-            }
-            savePaws(window.gameState.paws);
-            document.getElementById('theme-reward-modal').style.display = 'none';
-            showToast('🎉 Тема "Космический кристалл" и новая музыка разблокированы!');
-        }
-
-
         function setupUpdatesContent() {
             document.getElementById('updates-title-version').textContent = `(v${CURRENT_UPDATE_VERSION})`;
             document.getElementById('updates-list-version').textContent = `Обновление v${CURRENT_UPDATE_VERSION} (Текущее)`;
@@ -988,11 +1325,10 @@
             if (localStorage.getItem('lastShownUpdateVersion') !== CURRENT_UPDATE_VERSION) { localStorage.setItem('lastShownUpdateVersion', CURRENT_UPDATE_VERSION); }
         };
 
-        // --- ЛОГИКА ЗАГРУЗКИ И ИНИЦИАЛИЗАЦИИ ---
         function startGame() {
             updateAppState(false); 
             window.gameState.paws = loadPaws();
-            initStarfield(); // Запуск звездного фона
+            initStarfield();
             window.applyTheme(window.gameState.currentTheme); 
             migrateInventory(); 
             window.gameState.isDbReady = true;
@@ -1005,12 +1341,7 @@
             setupClickListener(); 
             setupResetConfirmationListener();
             requestWakeLock();
-            
-            if (!window.gameState.isThemeRewardClaimed) {
-                document.getElementById('theme-reward-modal').style.display = 'flex';
-            } else {
-                window.checkAndShowUpdatesScreen(); 
-            }
+            window.checkAndShowUpdatesScreen();
         }
 
         async function initLoading() {
@@ -1129,7 +1460,6 @@
             }, 500);
         }
         
-        // --- Анимация звездного фона ---
         function initStarfield() {
             const canvas = document.getElementById('starfield-canvas');
             const ctx = canvas.getContext('2d');
@@ -1181,6 +1511,8 @@
             const navItems = document.querySelectorAll('.nav-item');
             const sections = { 'nav-home': document.getElementById('home-section'), 'nav-inventory': document.getElementById('inventory-section'), 'nav-cases': document.getElementById('cases-section'), 'nav-settings': document.getElementById('settings-section'), 'case-details': document.getElementById('case-details-section'), };
             function showSection(sectionId) {
+                if (isPinningMode) cancelPinning();
+                if (isNeonMode) exitNeonMode();
                 Object.values(sections).forEach(s => { s.style.display = 'none'; });
                 if (sections[sectionId]) sections[sectionId].style.display = (sectionId === 'nav-home' || sectionId === 'case-details') ? 'flex' : 'block';
                 navItems.forEach(n => n.classList.remove('active'));
@@ -1242,7 +1574,6 @@
             opacity: 0.9;
             animation: dust-burst var(--dust-duration, 1s) ease-out forwards;
             box-shadow: 0 0 8px #e9d5ff;
-            /* Start from center of the element itself */
             transform: translate(-50%, -50%);
         }
 
@@ -1288,6 +1619,8 @@
         .case-reel { display:flex; gap: 8px; }
         .item-tile { width: 90px; height: 90px; padding: 2px; background-color: #1f2937; border-radius: 8px; box-shadow: inset 0 0 8px rgba(0,0,0,0.7); overflow: hidden; }
         .reel-indicator { position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 6px; height: 100%; background-color: #f59e0b; box-shadow: 0 0 15px #f59e0b; z-index: 20; border-radius: 3px; }
+        .reel-viewport-x10 { height: 90px; }
+        .reel-indicator-x10 { position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 4px; height: 100%; background-color: #f59e0b; z-index: 20; }
         .preview-grid-item { border-left: 6px solid; }
         @media (max-width: 640px) { .content-area { padding: 10px; padding-top: 70px; padding-bottom: 70px; } #home-section, #inventory-section, #cases-section, #settings-section, #case-details-section { padding-top: 20px; } }
         
@@ -1297,6 +1630,8 @@
         .modal-secret-glow { border: 2px solid #fff; animation: rainbow-glow 3s infinite alternate; }
         @keyframes mega-secret-modal-glow { 0%, 100% { box-shadow: 0 0 30px #ffdf00, inset 0 0 15px #ffdf0044; border-color: #ffdf00; } 50% { box-shadow: 0 0 40px #ffA500, inset 0 0 20px #ffA50055; border-color: #ffA500; } }
         .modal-mega-secret-glow { border: 2px solid; animation: mega-secret-modal-glow 2s infinite alternate; }
+        @keyframes neon-glow { 0%, 100% { text-shadow: 0 0 5px #39ff14, 0 0 10px #39ff14, 0 0 15px #39ff14; } 50% { text-shadow: 0 0 10px #39ff14, 0 0 20px #39ff14, 0 0 30px #39ff14; } }
+        .neon-text-glow { animation: neon-glow 1.5s infinite alternate; }
 
         #loading-screen {
             position: fixed;
@@ -1408,12 +1743,31 @@
                 <p class="text-lg font-semibold">Активные Питомцы</p>
                 <p id="active-pets-count" class="text-lg font-bold text-blue-400">Активных: 0 / 3</p>
             </div>
-            <button onclick="window.equipBestPets()" class="w-full py-3 mb-4 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-xl transition-all shadow-lg hover:shadow-purple-600/50">
-                <i class="fas fa-magic mr-2"></i> Одеть Лучших
+            
+            <div class="grid grid-cols-2 gap-4 mb-4">
+                <button onclick="window.equipBestPets()" class="w-full py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-xl transition-all shadow-lg text-sm sm:text-base">
+                    <i class="fas fa-magic mr-1 sm:mr-2"></i> авто - выбор
+                </button>
+                <button onclick="window.showCollectionModal()" class="w-full py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition-all shadow-lg text-sm sm:text-base">
+                    <i class="fas fa-book mr-1 sm:mr-2"></i> Коллекция
+                </button>
+                <button onclick="window.startPinning()" class="w-full py-2 bg-yellow-600 hover:bg-yellow-500 text-white font-bold rounded-xl transition-all shadow-lg text-sm sm:text-base">
+                    <i class="fas fa-thumbtack mr-1 sm:mr-2"></i> Закрепление
+                </button>
+                <button onclick="window.startNeonMode()" class="w-full py-2 bg-green-500 hover:bg-green-400 text-white font-bold rounded-xl transition-all shadow-lg text-sm sm:text-base">
+                    <i class="fas fa-atom mr-1 sm:mr-2"></i> Неон
+                </button>
+            </div>
+
+            <div id="inventory-controls" class="bg-gray-900 p-3 rounded-xl mb-4 border-l-4 border-yellow-400" style="display: none;">
+                <p id="controls-text" class="text-center font-semibold mb-2"></p>
+                <div id="controls-buttons" class="flex justify-center space-x-4"></div>
+            </div>
+
+            <button onclick="window.showAutoSellConfirmation()" class="w-full py-3 mb-4 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl transition-all shadow-lg">
+                <i class="fas fa-dollar-sign mr-2"></i> Авто-продажа
             </button>
-            <button onclick="window.showCollectionModal()" class="w-full py-3 mb-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition-all shadow-lg hover:shadow-blue-600/50">
-                <i class="fas fa-book mr-2"></i> Коллекция
-            </button>
+
             <div id="inventory-container" class="space-y-4"></div>
             <div id="inventory-empty-state" class="flex flex-col items-center justify-center p-8 rounded-xl mt-4 border-2 border-dashed" style="display: flex;">
                 <i class="fas fa-box-open text-6xl text-gray-600 mb-4"></i>
@@ -1454,7 +1808,16 @@
                     <div class="reel-indicator"></div>
                     <div id="case-reel" class="case-reel w-max items-center h-full"></div>
                 </div>
-                <button id="open-case-button" class="w-full py-4 text-xl font-extrabold rounded-xl transition-all shadow-lg disabled:opacity-70 disabled:cursor-not-allowed"></button>
+                <div class="flex items-center space-x-4">
+                    <div class="flex-grow flex flex-col items-center">
+                        <button id="open-case-button-1" onclick="window.startCaseSpin(1)" class="w-full py-3 text-lg font-extrabold rounded-xl transition-all shadow-lg">Открыть</button>
+                        <span id="open-case-cost-1" class="text-sm text-gray-400 mt-1"></span>
+                    </div>
+                    <div class="flex-grow-0 flex flex-col items-center">
+                        <button id="open-case-button-10" onclick="window.startCaseSpin(10)" class="w-full px-6 py-2 text-md font-extrabold rounded-xl transition-all shadow-lg">x10</button>
+                        <span id="open-case-cost-10" class="text-xs text-gray-400 mt-1"></span>
+                    </div>
+                </div>
                 <h3 class="text-2xl font-bold mt-8 mb-4">Шансы Выпадения</h3>
                 <div id="case-preview-container" class="grid grid-cols-1 sm:grid-cols-2 gap-4"></div>
             </div>
@@ -1488,17 +1851,27 @@
     <!-- Modals -->
     <div id="notification-modal" class="fixed bottom-20 left-1/2 transform -translate-x-1/2 p-3 bg-gray-700 text-white rounded-lg shadow-2xl z-[500]" style="display: none;"><p id="notification-text" class="text-sm font-semibold"></p></div>
     <div id="win-notification-modal" class="modal fixed inset-0 flex items-center justify-center z-[600]" style="display: none;"><div class="modal-content p-8 rounded-2xl text-center shadow-[0_0_50px_rgba(255,255,255,0.1)] w-full max-w-sm"><p class="text-3xl font-extrabold mb-4">Новый Питомец!</p><div id="win-icon-container" class="w-24 h-24 mb-4 flex items-center justify-center rounded-xl bg-gray-900 border-4 mx-auto overflow-hidden"></div><h3 id="win-name" class="text-xl font-extrabold mb-1"></h3><p id="win-rarity" class="text-md mb-6"></p><button id="add-to-inventory-button" class="w-full py-3 bg-green-600 hover:bg-green-500 font-bold rounded-xl">Продолжить</button></div></div>
-    <div id="updates-modal" class="modal fixed inset-0 flex items-center justify-center z-[700]" style="display: none;"><div class="modal-content p-8 rounded-2xl text-center shadow-2xl w-full max-w-md border-t-4 border-blue-500"><h2 class="text-3xl font-extrabold text-blue-400 mb-4 flex flex-wrap items-center justify-center"><i class="fas fa-bolt mr-3"></i> Нововведения <span id="updates-title-version" class="break-words ml-1"></span></h2><p class="text-lg mb-6">Привет! Мы обновили игру.</p><div class="bg-gray-800 p-4 rounded-lg border text-left overflow-y-auto max-h-48">
+    <div id="updates-modal" class="modal fixed inset-0 flex items-center justify-center z-[700]" style="display: none;"><div class="modal-content p-8 rounded-2xl text-center shadow-2xl w-full max-w-md border-t-4 border-blue-500"><h2 class="text-3xl font-extrabold text-blue-400 mb-4 flex flex-wrap items-center justify-center"><i class="fas fa-bolt mr-3"></i> Нововведения <span id="updates-title-version" class="break-words ml-1"></span></h2><p class="text-lg mb-6">Привет! Мы обновили игру.</p><div class="bg-gray-800 p-4 rounded-lg border text-left overflow-y-auto max-h-60">
         <ul class="list-disc list-inside space-y-2">
             <li class="font-bold text-yellow-300" id="updates-list-version"></li>
-            <li><span class="text-purple-400 font-semibold">НОВАЯ ТЕМА:</span> "Космический кристалл" с эффектами размытия и анимацией.</li>
-            <li><span class="text-green-400 font-semibold">НОВЫЙ ЭФФЕКТ:</span> Пыль при клике на кнопку в новой теме.</li>
-             <li><span class="text-blue-400 font-semibold">УЛУЧШЕНИЕ:</span> Анимированный фон со звездами для полного погружения.</li>
+            <li><span class="text-green-400 font-semibold">ОТКРЫТИЕ x10:</span> Добавлена кнопка для открытия 10 кейсов сразу с новой анимацией!</li>
+            <li><span class="text-purple-400 font-semibold">УЛУЧШЕНИЯ КЛИКА:</span> В инвентаре появилась новая ветка улучшений для увеличения силы клика.</li>
+            <li><span class="text-blue-400 font-semibold">УЛУЧШЕНИЯ ИНТЕРФЕЙСА:</span>
+                <ul class="list-disc list-inside pl-4 mt-1">
+                    <li>Надпись "Неон" перемещена влево и улучшена.</li>
+                    <li>Кнопки открытия кейсов теперь меняют цвет (синий/красный) и не показывают цену.</li>
+                    <li>Нельзя открыть кейс, пока идет предыдущая прокрутка.</li>
+                </ul>
+            </li>
+            <li class="font-bold text-yellow-300/70 mt-4 pt-2 border-t border-gray-600">Обновление v2.6.0</li>
+             <li><span class="text-purple-400/80 font-semibold">НОВЫЕ ФУНКЦИИ:</span> Закрепление, Неоновые питомцы и Авто-продажа в инвентаре!</li>
+            <li><span class="text-green-400/80 font-semibold">ИЗМЕНЕНИЯ:</span> Обновлен вид кнопок в инвентаре для удобства.</li>
         </ul>
     </div><button onclick="window.closeUpdatesScreen()" class="w-full py-3 bg-blue-500 hover:bg-blue-400 font-bold rounded-xl mt-6">Начать играть!</button></div></div>
     <div id="reset-confirm-modal" class="modal fixed inset-0 flex items-center justify-center z-[800] p-4" style="display: none;"><div class="modal-content p-8 rounded-2xl text-center shadow-2xl w-full max-w-sm border-t-4 border-red-500"><h3 class="text-2xl font-extrabold text-red-400 mb-4">Подтверждение Сброса</h3><p class="text-md mb-4">Это действие **нельзя отменить**. Чтобы подтвердить, введите <code class="bg-gray-900 text-red-400 font-mono p-1 rounded">удалить данные</code> в поле ниже.</p><input id="reset-confirm-input" type="text" class="w-full border rounded-lg p-2 text-center mb-4 focus:outline-none focus:ring-2 focus:ring-red-500" placeholder="удалить данные"><div class="flex space-x-4"><button onclick="window.closeResetConfirmation()" class="flex-1 py-3 bg-gray-600 hover:bg-gray-500 font-bold rounded-xl">Отмена</button><button id="reset-confirm-button" onclick="window.performReset()" class="flex-1 py-3 bg-red-800 text-gray-500 font-bold rounded-xl cursor-not-allowed" disabled>Сбросить</button></div></div></div>
     <div id="sell-confirm-modal" class="modal fixed inset-0 flex items-center justify-center z-[1100]" style="display: none;"><div class="modal-content p-8 rounded-2xl text-center shadow-2xl w-full max-w-sm border-t-4 border-yellow-500"><h3 class="text-2xl font-extrabold mb-4">Подтверждение Продажи</h3><p class="text-md mb-6">Продать **<span id="sell-pet-name" class="text-yellow-400 font-bold"></span>** за <span id="sell-pet-price" class="text-green-400 font-bold">0.00</span> Лапок?</p><div class="flex space-x-4"><button onclick="document.getElementById('sell-confirm-modal').style.display='none'; window.playNavClickSound();" class="flex-1 py-3 bg-gray-600 hover:bg-gray-500 font-bold rounded-xl">Отмена</button><button id="sell-confirm-button" onclick="window.performSell()" class="flex-1 py-3 bg-green-600 hover:bg-green-500 font-bold rounded-xl">Продать</button></div></div></div>
-    <div id="upgrades-modal" class="modal fixed inset-0 flex items-center justify-center z-[800] p-4" style="display: none;"><div class="modal-content p-6 rounded-2xl shadow-2xl w-full max-w-lg border-t-4 border-yellow-500 mx-auto max-h-[90vh] flex flex-col"><div class="flex justify-between items-center mb-4"><h3 class="text-2xl font-extrabold">Улучшения</h3><button onclick="window.closeUpgradesModal()" class="hover:text-white"><i class="fas fa-times text-2xl"></i></button></div><p class="text-md mb-6 border-b pb-3">Покупайте улучшения, чтобы стать сильнее!</p><div id="upgrades-list-container" class="space-y-4 overflow-y-auto pr-2"></div></div></div>
+    <div id="auto-sell-confirm-modal" class="modal fixed inset-0 flex items-center justify-center z-[1100]" style="display: none;"><div class="modal-content p-8 rounded-2xl text-center shadow-2xl w-full max-w-sm border-t-4 border-red-500"><h3 class="text-2xl font-extrabold mb-4">Авто-продажа</h3><p class="text-md mb-6">Вы хотите продать всех **не закрепленных** питомцев?</p><div class="flex space-x-4"><button onclick="document.getElementById('auto-sell-confirm-modal').style.display='none'; window.playNavClickSound();" class="flex-1 py-3 bg-gray-600 hover:bg-gray-500 font-bold rounded-xl">Отмена</button><button onclick="window.performAutoSell()" class="flex-1 py-3 bg-red-600 hover:bg-red-500 font-bold rounded-xl">Да, продать</button></div></div></div>
+    <div id="upgrades-modal" class="modal fixed inset-0 flex items-center justify-center z-[800] p-4" style="display: none;"><div class="modal-content p-6 rounded-2xl shadow-2xl w-full max-w-lg border-t-4 border-yellow-500 mx-auto max-h-[90vh] flex flex-col"><div class="flex justify-between items-center mb-4"><h3 class="text-2xl font-extrabold">Улучшения</h3><button onclick="window.closeUpgradesModal()" class="hover:text-white"><i class="fas fa-times text-2xl"></i></button></div><p class="text-md mb-2 text-center">Покупайте улучшения, чтобы стать сильнее!</p><div id="upgrades-list-container" class="flex-grow space-y-4 overflow-y-auto pr-2"></div></div></div>
     <div id="collection-modal" class="modal fixed inset-0 flex items-center justify-center z-[900] p-4" style="display: none;"><div class="modal-content p-6 rounded-2xl shadow-2xl w-full max-w-4xl border-t-4 border-purple-500 mx-auto max-h-[90vh] flex flex-col"><div class="flex justify-between items-center mb-4 flex-shrink-0"><div><h3 class="text-2xl font-extrabold">Коллекция Питомцев</h3><p id="collection-counter" class="text-sm">Найдено: 0 / 0</p></div><button onclick="window.closeCollectionModal()" class="transition-colors"><i class="fas fa-times text-2xl"></i></button></div><div id="collection-grid" class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-4 overflow-y-auto p-2 rounded-lg flex-grow"></div><div class="mt-4 flex-shrink-0"><button id="collection-reward-button" onclick="window.claimCollectionReward()" class="w-full py-3 font-bold rounded-xl transition-all shadow-lg text-lg" disabled>Забрать 22 222 Лапок</button></div></div></div>
     <div id="pet-preview-modal" class="modal fixed inset-0 flex items-center justify-center z-[1000] p-4" style="display: none;" onclick="window.closePetPreview()">
         <div id="pet-preview-content" class="p-8 rounded-2xl text-center w-full max-w-sm transition-all" onclick="event.stopPropagation()">
@@ -1510,15 +1883,21 @@
              <button onclick="window.closePetPreview()" class="w-full mt-4 py-2 bg-gray-600 hover:bg-gray-500 font-bold rounded-xl">Закрыть</button>
         </div>
     </div>
-    <div id="theme-reward-modal" class="modal fixed inset-0 flex items-center justify-center z-[1200] p-4" style="display: none;">
-        <div class="modal-content p-8 rounded-2xl text-center shadow-2xl w-full max-w-md border-t-4 border-purple-500">
-            <h2 class="text-3xl font-extrabold text-purple-400 mb-4"><i class="fas fa-gem mr-3"></i>Награда за Коллекцию!</h2>
-            <p class="text-lg mb-6">За открытие прошлой полной коллекции вы получаете тему "Космический кристалл" и новую музыку!</p>
-            <div class="p-4 border-2 border-dashed border-purple-400 rounded-xl mb-6 bg-gray-900">
-                <p class="font-bold text-xl">Тема: Космический кристалл</p>
-                <div class="w-full h-16 mt-2 rounded-lg bg-gradient-to-br from-indigo-900 via-purple-900 to-fuchsia-900"></div>
+    <div id="x10-spin-modal" class="modal fixed inset-0 flex items-center justify-center z-[1200] p-4" style="display: none;">
+        <div class="modal-content p-4 rounded-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
+            <h3 class="text-2xl font-extrabold text-center mb-4">Открытие x10...</h3>
+            <div id="x10-reels-container" class="flex flex-col space-y-2 overflow-y-auto">
+                <!-- Reels will be generated here -->
             </div>
-            <button onclick="window.claimThemeReward()" class="w-full py-3 bg-purple-600 hover:bg-purple-500 font-bold rounded-xl mt-6">Забрать Награду</button>
+        </div>
+    </div>
+     <div id="x10-win-modal" class="modal fixed inset-0 flex items-center justify-center z-[1300] p-4" style="display: none;">
+        <div class="modal-content p-6 rounded-2xl w-full max-w-2xl">
+            <h3 class="text-3xl font-extrabold text-center mb-4">Ваши новые питомцы!</h3>
+            <div id="x10-win-grid" class="grid grid-cols-5 gap-3 max-h-[60vh] overflow-y-auto p-2">
+                <!-- Results will be shown here -->
+            </div>
+            <button onclick="window.closeX10WinModal()" class="w-full mt-4 py-3 bg-blue-500 hover:bg-blue-400 font-bold rounded-xl">Продолжить</button>
         </div>
     </div>
     <div id="themes-modal" class="modal fixed inset-0 flex items-center justify-center z-[800] p-4" style="display: none;">
