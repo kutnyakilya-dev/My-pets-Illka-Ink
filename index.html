@@ -14,7 +14,7 @@
     
 <script type="module">
         // --- Глобальные настройки и состояние ---
-        const CURRENT_UPDATE_VERSION = '3.2.0'; 
+        const CURRENT_UPDATE_VERSION = '3.4.0'; 
         const PASSIVE_TICK_RATE = 1000; 
         const SOUND_COOLDOWN = 150; 
         let passiveIntervalId = null; 
@@ -48,12 +48,7 @@
             unlockedMusic: ['standard'],
             musicPlaylist: ['standard'],
             currentMusicTrackIndex: 0,
-            luckBoost: {
-                multiplier: 1,
-                endTime: 0,
-                intervalId: null,
-                type: null
-            },
+            isSuperMode: false,
         };
         
         const FARMER_CASE_COST = 100.00; 
@@ -328,13 +323,13 @@
                     unlockedMusic: JSON.parse(localStorage.getItem('petFarmUnlockedMusic')) || ['standard'],
                     musicPlaylist: JSON.parse(localStorage.getItem('petFarmMusicPlaylist')) || ['standard'],
                     currentMusicTrackIndex: parseInt(localStorage.getItem('petFarmCurrentMusicIndex')) || 0,
-                    luckBoost: JSON.parse(localStorage.getItem('petFarmLuckBoost')) || { multiplier: 1, endTime: 0, intervalId: null, type: null },
+                    isSuperMode: JSON.parse(localStorage.getItem('petFarmSuperMode')) || false,
                 };
                 Object.assign(window.gameState, loadedState);
                 return parseFloat(localStorage.getItem('petFarmPaws')) || 0.00;
             } catch (e) {
                 console.error("Ошибка при загрузке из LocalStorage:", e);
-                Object.assign(window.gameState, { inventory: [], selectedPets: [], upgrades: { equippedPetsLevel: 0, clickPowerLevel: 0 }, foundPets: [], isCollectionRewardClaimed: false, isThemeRewardClaimed: true, unlockedThemes: ['standard'], currentTheme: 'standard', unlockedMusic: ['standard'], musicPlaylist: ['standard'], currentMusicTrackIndex: 0, luckBoost: { multiplier: 1, endTime: 0, intervalId: null, type: null } });
+                Object.assign(window.gameState, { inventory: [], selectedPets: [], upgrades: { equippedPetsLevel: 0, clickPowerLevel: 0 }, foundPets: [], isCollectionRewardClaimed: false, isThemeRewardClaimed: true, unlockedThemes: ['standard'], currentTheme: 'standard', unlockedMusic: ['standard'], musicPlaylist: ['standard'], currentMusicTrackIndex: 0, isSuperMode: false });
                 return 0.00;
             }
         }
@@ -352,73 +347,8 @@
                 localStorage.setItem('petFarmUnlockedMusic', JSON.stringify(window.gameState.unlockedMusic));
                 localStorage.setItem('petFarmMusicPlaylist', JSON.stringify(window.gameState.musicPlaylist));
                 localStorage.setItem('petFarmCurrentMusicIndex', window.gameState.currentMusicTrackIndex);
-                localStorage.setItem('petFarmLuckBoost', JSON.stringify({ ...window.gameState.luckBoost, intervalId: null }));
+                localStorage.setItem('petFarmSuperMode', JSON.stringify(window.gameState.isSuperMode));
             } catch (e) { console.error("Ошибка при сохранении в LocalStorage:", e); }
-        }
-
-        // --- Luck Boost Logic ---
-        function updateLuckTimer() {
-            const timerElement = document.getElementById('luck-timer');
-            const remainingTime = window.gameState.luckBoost.endTime - Date.now();
-            
-            if (remainingTime <= 0) {
-                timerElement.style.display = 'none';
-                clearInterval(window.gameState.luckBoost.intervalId);
-                window.gameState.luckBoost = { multiplier: 1, endTime: 0, intervalId: null, type: null };
-                savePaws(window.gameState.paws);
-                showToast("Действие удачи закончилось!");
-                return;
-            }
-
-            const minutes = Math.floor(remainingTime / 60000);
-            const seconds = Math.floor((remainingTime % 60000) / 1000).toString().padStart(2, '0');
-            const boostType = window.gameState.luckBoost.type === 'initial' ? 'Тройная Удача' : 'x4 Удача';
-            timerElement.innerHTML = `<i class="fas fa-clover mr-2"></i> ${boostType}: ${minutes}:${seconds}`;
-        }
-
-        window.activateLuckBoost = function(multiplier, durationMinutes, type) {
-             if (window.gameState.luckBoost.endTime > Date.now()) {
-                return showToast("У вас уже активен буст удачи!");
-            }
-            const durationMs = durationMinutes * 60 * 1000;
-            window.gameState.luckBoost.multiplier = multiplier;
-            window.gameState.luckBoost.endTime = Date.now() + durationMs;
-            window.gameState.luckBoost.type = type;
-
-            if (window.gameState.luckBoost.intervalId) {
-                clearInterval(window.gameState.luckBoost.intervalId);
-            }
-            
-            updateLuckTimer();
-            document.getElementById('luck-timer').style.display = 'flex';
-            window.gameState.luckBoost.intervalId = setInterval(updateLuckTimer, 1000);
-            savePaws(window.gameState.paws);
-        }
-
-        window.applyPromoCode = function() {
-            playNavClickSound();
-            const input = document.getElementById('promo-code-input');
-            const code = input.value.trim().toLowerCase();
-
-            if (code === 'бабуинка') {
-                activateLuckBoost(4, 10, 'promo');
-                showToast("✨ x4 Удача активирована на 10 минут!");
-                input.value = '';
-            } else {
-                showToast("Неверный промокод.");
-            }
-        }
-        
-        function showInitialLuckModal() {
-            const modal = document.getElementById('initial-luck-modal');
-            modal.style.display = 'flex';
-        }
-        
-        window.startInitialLuck = function() {
-            playNavClickSound();
-            document.getElementById('initial-luck-modal').style.display = 'none';
-            activateLuckBoost(3, 5, 'initial');
-            showToast("🍀 Тройная удача активирована на 5 минут!");
         }
 
         function migrateInventory() {
@@ -892,38 +822,17 @@
         function getWeightedRandomItem(caseId) {
             const caseData = CASES[caseId];
             if (!caseData) return null;
-
-            let itemsToUse = caseData.items;
-            let totalWeightToUse = caseData.totalWeight;
-            const boost = window.gameState.luckBoost;
-
-            if (boost && boost.multiplier > 1 && boost.endTime > Date.now()) {
-                const boostedRarities = (boost.type === 'initial')
-                    ? ["Мифический", "Секретный", "Мега Секретный"] // Выше Легендарного
-                    : ["Ультра Редкий", "Легендарный", "Мифический", "Секретный", "Мега Секретный"]; // От Эпик (Ультра Редкий) и выше
-
-                const modifiedItems = caseData.items.map(item => {
-                    if (boostedRarities.includes(item.rarity)) {
-                        return { ...item, weight: item.weight * boost.multiplier };
-                    }
-                    return item;
-                });
-
-                itemsToUse = modifiedItems;
-                totalWeightToUse = modifiedItems.reduce((sum, item) => sum + item.weight, 0);
-            }
-
-            let random = Math.random() * totalWeightToUse;
-            for (const item of itemsToUse) {
+        
+            let random = Math.random() * caseData.totalWeight;
+            for (const item of caseData.items) {
                 if (random < item.weight) {
-                    // Возвращаем оригинальный объект, чтобы не нарушать другие части игры
-                    return caseData.items.find(originalItem => originalItem.name === item.name);
+                    return item;
                 }
                 random -= item.weight;
             }
-            // Fallback
-            return caseData.items.find(originalItem => originalItem.name === itemsToUse[0].name);
+            return caseData.items[0]; // Fallback
         }
+
         function generateReel(winningItem, reelElement, isX10 = false) {
             reelElement.innerHTML = '';
             const items = Array.from({ length: 75 }, () => getWeightedRandomItem(currentCaseId));
@@ -985,12 +894,15 @@
             savePaws(window.gameState.paws);
             updatePawsDisplay();
             
+            const isSuper = window.gameState.isSuperMode;
+            
             if (count === 1) {
+                const spinDuration = isSuper ? 500 : 5000;
                 const openButton = document.getElementById('open-case-button-1');
                 const openButton10 = document.getElementById('open-case-button-10');
                 if(openButton) openButton.disabled = true;
                 if(openButton10) openButton10.disabled = true;
-                window.showCaseDetails(currentCaseId, true); // Update button colors to gray
+                window.showCaseDetails(currentCaseId, true); 
 
                 const winningItem = getWeightedRandomItem(currentCaseId);
                 const reel = document.getElementById('case-reel');
@@ -1000,57 +912,77 @@
                 reel.style.transform = 'translateX(0px)';
 
                 setTimeout(() => {
-                    reel.style.transition = 'transform 5s cubic-bezier(0.2, 0.7, 0.4, 1)';
+                    reel.style.transition = `transform ${spinDuration / 1000}s cubic-bezier(0.2, 0.7, 0.4, 1)`;
                     reel.style.transform = `translateX(${stopOffset}px)`;
+                    
+                    let soundTimeoutId;
+                    if (!isSuper) {
+                        let tickDelay = 50;
+                        const soundEndTime = Date.now() + (spinDuration - 200);
 
-                    const soundInterval = setInterval(() => {
-                        if (!isSpinning) { clearInterval(soundInterval); return; }
-                        try { if (reelTickSynth && Tone.context.state === 'running') { reelTickSynth.triggerAttackRelease('C6', '16n', Tone.now()); } } catch(e) {}
-                    }, 100);
+                        function playTickSound() {
+                            if (Date.now() > soundEndTime || !isSpinning) {
+                                clearTimeout(soundTimeoutId);
+                                return;
+                            }
+                            try { if (reelTickSynth && Tone.context.state === 'running') { reelTickSynth.triggerAttackRelease('C6', '16n', Tone.now()); } } catch (e) {}
+                            tickDelay = tickDelay * 1.04; 
+                            if(tickDelay > 300) tickDelay = 300;
+                            soundTimeoutId = setTimeout(playTickSound, tickDelay);
+                        }
+                        playTickSound();
+                    }
 
                     setTimeout(() => {
-                        clearInterval(soundInterval);
+                        clearTimeout(soundTimeoutId);
                         window.showWinModal(winningItem);
-                    }, 5050);
+                    }, spinDuration + 50);
                 }, 50);
 
             } else if (count === 10) {
+                const spinDuration = isSuper ? 1500 : 5500;
                 window.showCaseDetails(currentCaseId, true);
                 const modal = document.getElementById('x10-spin-modal');
                 const container = document.getElementById('x10-reels-container');
-                container.innerHTML = '';
+                container.innerHTML = ''; 
                 const winningItems = Array.from({ length: 10 }, () => getWeightedRandomItem(currentCaseId));
                 
+                let reelsHtml = '';
                 for(let i = 0; i < 10; i++) {
-                    container.innerHTML += `<div class="relative bg-gray-900 rounded-lg border-2 border-gray-700 reel-viewport-x10 overflow-hidden"><div class="reel-indicator-x10"></div><div id="x10-reel-${i}" class="case-reel w-max items-center h-full"></div></div>`;
+                    reelsHtml += `<div class="relative bg-gray-900 rounded-lg border-2 border-gray-700 reel-viewport-x10 overflow-hidden"><div class="reel-indicator-x10"></div><div id="x10-reel-${i}" class="case-reel w-max items-center h-full"></div></div>`;
                 }
+                container.innerHTML = reelsHtml;
                 modal.style.display = 'flex';
 
-                const soundIntervalX10 = setInterval(() => {
-                    if (!isSpinning) { clearInterval(soundIntervalX10); return; }
-                    try { if (reelTickSynth && Tone.context.state === 'running') { reelTickSynth.triggerAttackRelease('C7', '16n', Tone.now()); } } catch(e) {}
-                }, 120);
-
                 setTimeout(() => {
+                    let soundIntervalX10;
+                    if (!isSuper) {
+                         soundIntervalX10 = setInterval(() => {
+                            if (!isSpinning) { clearInterval(soundIntervalX10); return; }
+                            try { if (reelTickSynth && Tone.context.state === 'running') { reelTickSynth.triggerAttackRelease('C7', '16n', Tone.now()); } } catch(e) {}
+                        }, 120);
+                    }
+
                     winningItems.forEach((item, i) => {
                         const reel = document.getElementById(`x10-reel-${i}`);
                         const stopOffset = generateReel(item, reel, true);
                         reel.style.transition = 'none';
                         reel.style.transform = 'translateX(0px)';
+                        
                         setTimeout(() => {
-                            const duration = 4 + Math.random() * 2;
+                            const duration = isSuper ? 0.8 + Math.random() * 0.4 : 5;
                             reel.style.transition = `transform ${duration}s cubic-bezier(0.2, 0.7, 0.4, 1)`;
                             reel.style.transform = `translateX(${stopOffset}px)`;
-                        }, 50);
+                        }, 50 * (i * 0.2));
                     });
-                }, 100);
 
-                setTimeout(() => {
-                    modal.style.display = 'none';
-                    showX10WinModal(winningItems);
-                    isSpinning = false;
-                    clearInterval(soundIntervalX10);
-                }, 6500);
+                    setTimeout(() => {
+                        modal.style.display = 'none';
+                        showX10WinModal(winningItems);
+                        isSpinning = false;
+                        if(soundIntervalX10) clearInterval(soundIntervalX10);
+                    }, spinDuration);
+                }, 50); 
             }
         };
 
@@ -1067,12 +999,25 @@
             const grid = document.getElementById('x10-win-grid');
             grid.innerHTML = '';
             items.forEach(item => {
-                grid.innerHTML += `<div class="relative flex flex-col items-center justify-center p-2 rounded-lg bg-gray-700 border-2 ${item.border}">
-                    <img src="${item.icon}" alt="${item.name}" class="w-16 h-16 object-cover rounded-md" onerror="this.onerror=null;this.src='https://placehold.co/60x60/374151/fff?text=?';">
-                    <p class="mt-2 text-xs font-bold ${item.color} text-center truncate w-full">${item.name}</p>
+                grid.innerHTML += `
+                <div class="x10-pet-card bg-gray-700 rounded-lg border-2 ${item.border} p-2 flex flex-col items-center justify-start">
+                    <img src="${item.icon}" alt="${item.name}" class="w-20 h-20 object-cover rounded-md mb-2" onerror="this.onerror=null;this.src='https://placehold.co/80x80/374151/fff?text=?';">
+                    <p class="text-sm font-bold ${item.color} text-center leading-tight truncate w-full">${item.name}</p>
+                    <p class="text-xs ${item.color} opacity-75 text-center">${item.rarity}</p>
                 </div>`;
             });
             modal.style.display = 'flex';
+            
+            const cards = grid.querySelectorAll('.x10-pet-card');
+            if (window.gameState.isSuperMode) {
+                 cards.forEach(card => card.classList.add('visible-instant'));
+            } else {
+                cards.forEach((card, index) => {
+                    setTimeout(() => {
+                        card.classList.add('visible');
+                    }, index * 80);
+                });
+            }
         }
         window.closeX10WinModal = function() {
             playNavClickSound();
@@ -1115,6 +1060,7 @@
             if (!skipSectionChange) {
                 window.setupNavigation().showSection('case-details');
                 const reel = document.getElementById('case-reel');
+                reel.style.transition = 'none';
                 generateReel(caseData.items[0], reel, false); 
                 reel.style.transform = 'translateX(0px)';
             }
@@ -1132,6 +1078,7 @@
         }
         
         function createDustEffect() {
+            if (window.gameState.isSuperMode) return;
             const now = Date.now();
             if (now - lastDustEffectTime < DUST_EFFECT_COOLDOWN) {
                 return;
@@ -1311,7 +1258,7 @@
                 const isFound = window.gameState.foundPets.includes(pet.name);
                 let html;
                 if (isFound) {
-                    html = `<div class="relative flex flex-col items-center justify-center p-2 rounded-lg bg-gray-700 border-2 ${pet.border}"><img src="${pet.icon}" alt="${pet.name}" class="w-16 h-16 object-cover rounded-md" onerror="this.onerror=null;this.src='https://placehold.co/60x60/374151/fff?text=?';"><p class="mt-2 text-xs font-bold ${pet.color} text-center truncate w-full">${pet.name}</p><p class="text-xs ${pet.color} opacity-70 text-center">${pet.rarity}</p></div>`;
+                    html = `<div class="relative flex flex-col items-center justify-center p-2 rounded-lg bg-gray-700 border-2 ${pet.border}"><img src="${pet.icon}" alt="${pet.name}" class="w-16 h-16 object-cover rounded-md" onerror="this.onerror=null;this.src='https://placehold.co/60x60/374151/fff?text=?';"><p class="mt-2 text-xs font-bold ${pet.color} text-center truncate w-full">${pet.name}</p><p class="text-xs ${pet.color} opacity-75 text-center">${pet.rarity}</p></div>`;
                 } else {
                     html = `<div class="flex items-center justify-center p-2 rounded-lg bg-gray-900 aspect-square"><i class="fas fa-question text-4xl text-gray-700"></i></div>`;
                 }
@@ -1339,7 +1286,7 @@
             if (!THEMES[themeId]) return;
             document.getElementById('theme-styles').innerHTML = THEMES[themeId].css;
             const starfield = document.getElementById('starfield-canvas');
-            if (themeId === 'purple_crystal') {
+            if (themeId === 'purple_crystal' && !window.gameState.isSuperMode) {
                 starfield.style.display = 'block';
             } else {
                 starfield.style.display = 'none';
@@ -1425,10 +1372,23 @@
             if (localStorage.getItem('lastShownUpdateVersion') !== CURRENT_UPDATE_VERSION) { localStorage.setItem('lastShownUpdateVersion', CURRENT_UPDATE_VERSION); }
         };
 
+        window.toggleSuperMode = function(isChecked) {
+            playNavClickSound();
+            window.gameState.isSuperMode = isChecked;
+            savePaws(window.gameState.paws);
+            showToast(`Супер Режим ${isChecked ? 'включен' : 'выключен'}`);
+            document.body.classList.toggle('super-mode', isChecked);
+            window.applyTheme(window.gameState.currentTheme); // Re-apply theme to show/hide effects
+        }
+
         function startGame() {
             updateAppState(false); 
             window.gameState.paws = loadPaws();
             initStarfield();
+            
+            document.getElementById('super-mode-toggle').checked = window.gameState.isSuperMode;
+            document.body.classList.toggle('super-mode', window.gameState.isSuperMode);
+            
             window.applyTheme(window.gameState.currentTheme); 
             migrateInventory(); 
             window.gameState.isDbReady = true;
@@ -1442,20 +1402,6 @@
             setupResetConfirmationListener();
             requestWakeLock();
             
-            // Проверка на первую сессию и показ подарка
-            const isFirstSession = localStorage.getItem('isFirstSession') === null;
-            if (isFirstSession) {
-                localStorage.setItem('isFirstSession', 'false');
-                showInitialLuckModal();
-            }
-            // Восстановление таймера после перезагрузки
-            if (window.gameState.luckBoost && window.gameState.luckBoost.endTime > Date.now()) {
-                if (window.gameState.luckBoost.intervalId) clearInterval(window.gameState.luckBoost.intervalId);
-                updateLuckTimer();
-                window.gameState.luckBoost.intervalId = setInterval(updateLuckTimer, 1000);
-                document.getElementById('luck-timer').style.display = 'flex';
-            }
-            
             window.checkAndShowUpdatesScreen();
         }
 
@@ -1464,113 +1410,49 @@
             const progressBar = document.getElementById('progress-bar');
             const progressText = document.getElementById('loading-progress-text');
 
-            const canvas = document.getElementById('particle-canvas');
-            const ctx = canvas.getContext('2d');
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-            let particlesArray = [];
-
-            class Particle {
-                constructor() {
-                    this.x = Math.random() * canvas.width;
-                    this.y = Math.random() * canvas.height;
-                    this.size = Math.random() * 5 + 1;
-                    this.speedX = Math.random() * 3 - 1.5;
-                    this.speedY = Math.random() * 3 - 1.5;
-                    this.color = `hsla(${270 + Math.random() * 60}, 100%, 75%, 0.8)`;
-                }
-                update() {
-                    this.x += this.speedX;
-                    this.y += this.speedY;
-                    if (this.size > 0.2) this.size -= 0.1;
-                    if (this.x < 0 || this.x > canvas.width) this.speedX *= -1;
-                    if (this.y < 0 || this.y > canvas.height) this.speedY *= -1;
-                }
-                draw() {
-                    ctx.fillStyle = this.color;
-                    ctx.beginPath();
-                    ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
-                    ctx.fill();
-                }
-            }
-
-            function initParticles() {
-                for (let i = 0; i < 100; i++) {
-                    particlesArray.push(new Particle());
-                }
-            }
-
-            function handleParticles() {
-                for (let i = 0; i < particlesArray.length; i++) {
-                    particlesArray[i].update();
-                    particlesArray[i].draw();
-                    if (particlesArray[i].size <= 0.3) {
-                        particlesArray.splice(i, 1);
-                        i--;
-                        particlesArray.push(new Particle());
-                    }
-                }
-            }
-            
-            let animationFrameId;
-            function animateParticles() {
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                handleParticles();
-                animationFrameId = requestAnimationFrame(animateParticles);
-            }
-            initParticles();
-            animateParticles();
-            window.addEventListener('resize', () => {
-                canvas.width = window.innerWidth;
-                canvas.height = window.innerHeight;
-                particlesArray = [];
-                initParticles();
-            });
-
-
             const assetsToLoad = [];
             Object.values(CASES).forEach(c => {
                 assetsToLoad.push(c.icon);
                 c.items.forEach(item => assetsToLoad.push(item.icon));
             });
             Object.values(MUSIC_TRACKS).forEach(track => assetsToLoad.push(track.src));
-            const uniqueAssets = [...new Set(assetsToLoad)];
-
+            const uniqueAssets = [...new Set(assetsToLoad.filter(url => url && !url.includes('placehold.co')))];
+            
             let loadedCount = 0;
             const totalAssets = uniqueAssets.length;
 
-            for (const assetUrl of uniqueAssets) {
-                try {
-                    await new Promise((resolve, reject) => {
-                        if (assetUrl.match(/\.(mp3|wav|ogg)$/)) {
-                            const audio = new Audio();
-                            audio.src = assetUrl;
-                            audio.oncanplaythrough = resolve;
-                            audio.onerror = reject;
-                        } else if (assetUrl.match(/\.(png|jpg|jpeg|gif)$/)) {
-                            const img = new Image();
-                            img.src = assetUrl;
-                            img.onload = resolve;
-                            img.onerror = reject;
-                        } else {
-                            resolve(); 
-                        }
-                    });
-                } catch (error) {
-                    console.warn(`Не удалось загрузить ассет: ${assetUrl}`, error);
-                }
-                
+            const updateProgress = () => {
                 loadedCount++;
                 const progress = (loadedCount / totalAssets) * 100;
                 progressBar.style.width = `${progress}%`;
                 progressText.textContent = `Загрузка ассетов... ${Math.round(progress)}%`;
-                 await new Promise(res => setTimeout(res, 10)); 
-            }
+            };
+
+            const assetPromises = uniqueAssets.map(url => {
+                return new Promise((resolve) => {
+                    const isAudio = url.match(/\.(mp3|wav|ogg)$/);
+                    const element = isAudio ? new Audio() : new Image();
+                    
+                    const finish = () => {
+                        updateProgress();
+                        resolve();
+                    };
+
+                    element.onload = finish;
+                    element.oncanplaythrough = finish;
+                    element.onerror = () => {
+                        console.warn(`Не удалось загрузить ассет: ${url}`);
+                        finish(); 
+                    };
+                    element.src = url;
+                });
+            });
+
+            await Promise.all(assetPromises);
 
             loadingScreen.classList.add('fade-out');
             setTimeout(() => {
                 loadingScreen.style.display = 'none';
-                cancelAnimationFrame(animationFrameId);
                 startGame();
             }, 500);
         }
@@ -1646,7 +1528,7 @@
     </script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
-        :root { --bg-primary: #1a202c; } /* Устанавливаем базовый фон для заставки */
+        :root { --bg-primary: #1a202c; } 
         body { font-family: 'Inter', sans-serif; background-color: var(--bg-primary); color: var(--text-primary); margin: 0; padding: 0; display: flex; flex-direction: column; min-height: 10vh; transition: background-color 0.3s; }
         .header { background-color: var(--header-bg); }
         .bottom-nav { background-color: var(--bg-secondary); border-top: 1px solid var(--border-primary); }
@@ -1660,48 +1542,10 @@
         .nav-item { color: var(--text-secondary); }
         .nav-item.active { color: var(--text-accent); }
         
-        #starfield-canvas {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: 0;
-            display: none; /* Скрыт по умолчанию */
-        }
-
-        #dust-container {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            pointer-events: none;
-            z-index: 1000;
-        }
-
-        .dust-particle {
-            position: absolute;
-            width: 5px;
-            height: 5px;
-            background-color: #c084fc;
-            border-radius: 50%;
-            opacity: 0.9;
-            animation: dust-burst var(--dust-duration, 1s) ease-out forwards;
-            box-shadow: 0 0 8px #e9d5ff;
-            transform: translate(-50%, -50%);
-        }
-
-        @keyframes dust-burst {
-            from {
-                transform: translate(-50%, -50%) scale(1);
-                opacity: 1;
-            }
-            to {
-                transform: translate(var(--dust-x-end), var(--dust-y-end)) scale(0);
-                opacity: 0;
-            }
-        }
+        #starfield-canvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 0; display: none; }
+        #dust-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1000; }
+        .dust-particle { position: absolute; width: 5px; height: 5px; background-color: #c084fc; border-radius: 50%; opacity: 0.9; animation: dust-burst var(--dust-duration, 1s) ease-out forwards; box-shadow: 0 0 8px #e9d5ff; transform: translate(-50%, -50%); }
+        @keyframes dust-burst { from { transform: translate(-50%, -50%) scale(1); opacity: 1; } to { transform: translate(var(--dust-x-end), var(--dust-y-end)) scale(0); opacity: 0; } }
         
         .content-area { flex-grow: 1; padding: 20px; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; overflow-y: auto; padding-bottom: 80px; padding-top: 80px; position: relative; z-index: 10; }
         #case-details-section, #inventory-section, #cases-section, #settings-section { width: 100%; height: 100%; max-width: 100%; padding: 0; flex-grow: 1; }
@@ -1723,12 +1567,7 @@
         @keyframes mega-secret-glow { 0%, 100% { box-shadow: 0 0 20px rgba(255, 223, 0, 0.5); } 50% { box-shadow: 0 0 30px rgba(255, 165, 0, 1.0); } }
         .border-mega-secret { border-color: #ffdf00 !important; border-width: 4px !important; animation: mega-secret-glow 2s infinite alternate; }
         @keyframes rainbow-bg { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
-        .glow-mega-secret { 
-            background: linear-gradient(45deg, #ffdf00, #ff00c8, #7a00ff, #002bff, #00ffd5, #48ff00, #fffb00, #ff7300);
-            background-size: 400% 400%;
-            animation: rainbow-bg 3s ease infinite, mega-secret-glow 1s infinite alternate;
-            border-color: #ffdf00 !important;
-        }
+        .glow-mega-secret { background: linear-gradient(45deg, #ffdf00, #ff00c8, #7a00ff, #002bff, #00ffd5, #48ff00, #fffb00, #ff7300); background-size: 400% 400%; animation: rainbow-bg 3s ease infinite, mega-secret-glow 1s infinite alternate; border-color: #ffdf00 !important; }
         .border-mega-secret-win { border-color: #ffdf00 !important; border-width: 4px !important; animation: mega-secret-glow 1.5s infinite alternate; box-shadow: 0 0 40px rgba(255, 165, 0, 0.8); }
         .reel-viewport { height: 100px; padding-top: 5px; overflow-x: hidden; }
         .case-reel { display:flex; gap: 8px; }
@@ -1748,78 +1587,22 @@
         @keyframes neon-glow { 0%, 100% { text-shadow: 0 0 5px #39ff14, 0 0 10px #39ff14, 0 0 15px #39ff14; } 50% { text-shadow: 0 0 10px #39ff14, 0 0 20px #39ff14, 0 0 30px #39ff14; } }
         .neon-text-glow { animation: neon-glow 1.5s infinite alternate; }
 
-        #loading-screen {
-            position: fixed;
-            inset: 0;
-            background-color: #111827;
-            z-index: 9999;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            transition: opacity 0.5s ease-out;
-            text-align: center;
-            padding: 1rem;
-        }
-        #loading-screen.fade-out {
-            opacity: 0;
-        }
-        #particle-canvas {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: -1;
-        }
-        #loading-screen h1 {
-            font-size: 3rem;
-            font-weight: 900;
-            letter-spacing: 0.1em;
-            text-shadow: 0 0 10px rgba(192, 132, 252, 0.7), 0 0 20px rgba(147, 51, 234, 0.5);
-            margin-bottom: 2rem;
-        }
-         @media (min-width: 640px) {
-            #loading-screen h1 {
-                font-size: 4rem;
-            }
-        }
-        #progress-bar-container {
-            width: 80%;
-            max-width: 400px;
-            height: 20px;
-            background-color: #374151;
-            border-radius: 10px;
-            overflow: hidden;
-            border: 2px solid #4b5563;
-            box-shadow: inset 0 0 5px rgba(0,0,0,0.5);
-        }
-        #progress-bar {
-            width: 0%;
-            height: 100%;
-            background: linear-gradient(90deg, #a855f7, #e879f9);
-            border-radius: 8px;
-            transition: width 0.2s ease-out;
-        }
-        #loading-progress-text {
-            margin-top: 1rem;
-            font-size: 1rem;
-            color: #d1d5db;
-        }
-        #luck-timer {
-            animation: luck-glow 2s infinite alternate;
-        }
-        @keyframes luck-glow {
-            from {
-                box-shadow: 0 0 10px #facc15, 0 0 20px #facc15;
-                color: #fde68a;
-            }
-            to {
-                box-shadow: 0 0 20px #f59e0b, 0 0 30px #f59e0b;
-                color: #fef08a;
-            }
-        }
+        #loading-screen { position: fixed; inset: 0; background-color: #111827; z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; transition: opacity 0.5s ease-out; text-align: center; padding: 1rem; }
+        #loading-screen.fade-out { opacity: 0; }
+        #loading-screen h1 { font-size: 3rem; font-weight: 900; letter-spacing: 0.1em; text-shadow: 0 0 10px rgba(192, 132, 252, 0.7), 0 0 20px rgba(147, 51, 234, 0.5); margin-bottom: 2rem; }
+         @media (min-width: 640px) { #loading-screen h1 { font-size: 4rem; } }
+        #progress-bar-container { width: 80%; max-width: 400px; height: 20px; background-color: #374151; border-radius: 10px; overflow: hidden; border: 2px solid #4b5563; box-shadow: inset 0 0 5px rgba(0,0,0,0.5); }
+        #progress-bar { width: 0%; height: 100%; background: linear-gradient(90deg, #a855f7, #e879f9); border-radius: 8px; transition: width 0.1s ease-out; }
+        #loading-progress-text { margin-top: 1rem; font-size: 1rem; color: #d1d5db; }
+        
+        #x10-win-grid { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); }
+        .x10-pet-card { opacity: 0; transform: scale(0.8) translateY(20px); transition: opacity 0.3s ease-out, transform 0.3s ease-out; }
+        .x10-pet-card.visible { opacity: 1; transform: scale(1) translateY(0); }
+        .x10-pet-card.visible-instant { opacity: 1; transform: none; }
+
+        /* Super Mode Toggle */
+        #super-mode-toggle:checked ~ .dot { transform: translateX(1.5rem); background-color: #4ade80; }
+        #super-mode-toggle:checked ~ .block { background-color: #22c55e; }
     </style>
 </head>
 <body class="min-h-screen">
@@ -1828,7 +1611,6 @@
     <div id="dust-container"></div>
     
     <div id="loading-screen">
-        <canvas id="particle-canvas"></canvas>
         <h1>My Pets</h1>
         <div id="progress-bar-container">
             <div id="progress-bar"></div>
@@ -1837,10 +1619,6 @@
     </div>
 
     <audio id="music-player" onended="window.playNextTrack()"></audio>
-    
-    <div id="luck-timer" class="fixed top-16 left-1/2 -translate-x-1/2 bg-gray-900/80 backdrop-blur-sm text-yellow-300 font-bold px-4 py-2 rounded-full shadow-lg z-50 items-center" style="display: none;">
-    </div>
-
 
     <header class="header fixed top-0 left-0 w-full p-3 shadow-lg z-50 flex justify-between items-center h-16 transition-colors">
         <div class="text-xl font-black tracking-wider">My Pets</div>
@@ -1962,12 +1740,16 @@
                 <button onclick="window.showThemesModal()" class="w-full px-4 py-3 bg-purple-600 hover:bg-purple-500 font-semibold rounded-lg"><i class="fas fa-paint-brush mr-2"></i> Темы</button>
                 <button onclick="window.showMusicModal()" class="w-full px-4 py-3 bg-green-600 hover:bg-green-500 font-semibold rounded-lg"><i class="fas fa-music mr-2"></i> Музыка</button>
             </div>
-            <div class="bg-gray-800 p-6 rounded-xl space-y-4 shadow-xl mt-4">
-                 <p class="text-lg font-semibold">Промокод</p>
-                <div class="flex space-x-2">
-                    <input id="promo-code-input" type="text" class="w-full bg-gray-700 border-gray-600 text-white rounded-lg p-2 text-center focus:ring-2 focus:ring-green-500 focus:outline-none" placeholder="Введите код">
-                    <button onclick="window.applyPromoCode()" class="px-4 py-2 bg-green-600 hover:bg-green-500 font-semibold rounded-lg text-white">Активировать</button>
-                </div>
+             <div class="bg-gray-800 p-6 rounded-xl space-y-4 shadow-xl mt-4">
+                <p class="text-lg font-semibold">Производительность</p>
+                <label for="super-mode-toggle" class="flex items-center justify-between cursor-pointer">
+                    <span class="text-white font-bold">Супер Режим</span>
+                    <div class="relative">
+                        <input type="checkbox" id="super-mode-toggle" class="sr-only" onchange="window.toggleSuperMode(this.checked)">
+                        <div class="block bg-gray-600 w-14 h-8 rounded-full transition"></div>
+                        <div class="dot absolute left-1 top-1 bg-white w-6 h-6 rounded-full transition"></div>
+                    </div>
+                </label>
             </div>
             <div class="bg-gray-800 p-6 rounded-xl space-y-4 shadow-xl mt-4">
                 <p class="text-lg font-semibold">Информация</p>
@@ -1988,24 +1770,16 @@
     </nav>
     
     <!-- Modals -->
-    <div id="initial-luck-modal" class="modal fixed inset-0 flex items-center justify-center z-[1400] p-4" style="display: none;">
-        <div class="modal-content p-8 rounded-2xl text-center shadow-2xl w-full max-w-sm border-t-4 border-yellow-400">
-            <i class="fas fa-gift text-5xl text-yellow-400 mb-4"></i>
-            <h3 class="text-2xl font-extrabold text-yellow-300 mb-4">Подарок для новичка!</h3>
-            <p class="text-md mb-6">Вы получаете <span class="font-bold">Тройную Удачу (x3)</span> на выпадение питомцев качеством выше Легендарного на 5 минут!</p>
-            <button onclick="window.startInitialLuck()" class="w-full py-3 bg-green-600 hover:bg-green-500 font-bold rounded-xl">Активировать!</button>
-        </div>
-    </div>
     <div id="notification-modal" class="fixed bottom-20 left-1/2 transform -translate-x-1/2 p-3 bg-gray-700 text-white rounded-lg shadow-2xl z-[500]" style="display: none;"><p id="notification-text" class="text-sm font-semibold"></p></div>
     <div id="win-notification-modal" class="modal fixed inset-0 flex items-center justify-center z-[600]" style="display: none;"><div class="modal-content p-8 rounded-2xl text-center shadow-[0_0_50px_rgba(255,255,255,0.1)] w-full max-w-sm"><p class="text-3xl font-extrabold mb-4">Новый Питомец!</p><div id="win-icon-container" class="w-24 h-24 mb-4 flex items-center justify-center rounded-xl bg-gray-900 border-4 mx-auto overflow-hidden"></div><h3 id="win-name" class="text-xl font-extrabold mb-1"></h3><p id="win-rarity" class="text-md mb-6"></p><button id="add-to-inventory-button" class="w-full py-3 bg-green-600 hover:bg-green-500 font-bold rounded-xl">Продолжить</button></div></div>
     <div id="updates-modal" class="modal fixed inset-0 flex items-center justify-center z-[700]" style="display: none;"><div class="modal-content p-8 rounded-2xl text-center shadow-2xl w-full max-w-md border-t-4 border-blue-500"><h2 class="text-3xl font-extrabold text-blue-400 mb-4 flex flex-wrap items-center justify-center"><i class="fas fa-bolt mr-3"></i> Нововведения <span id="updates-title-version" class="break-words ml-1"></span></h2><p class="text-lg mb-6">Привет! Мы обновили игру.</p><div class="bg-gray-800 p-4 rounded-lg border text-left overflow-y-auto max-h-60">
         <ul class="list-disc list-inside space-y-2">
             <li class="font-bold text-yellow-300" id="updates-list-version"></li>
-            <li><span class="text-green-400 font-semibold">АКЦИЯ "УДАЧА":</span> Добавлен одноразовый подарок "Тройная Удача" для новых игроков и возможность активации "x4 Удачи" через промокод "Бабуинка" в настройках.</li>
-            <li class="font-bold text-yellow-300/70 mt-4 pt-2 border-t border-gray-600">Обновление v3.1.0</li>
-            <li><span class="text-green-400/80 font-semibold">ОТКРЫТИЕ x10:</span> Добавлена кнопка для открытия 10 кейсов сразу.</li>
-            <li><span class="text-purple-400/80 font-semibold">УЛУЧШЕНИЯ КЛИКА:</span> Новая ветка улучшений для силы клика.</li>
-            <li><span class="text-blue-400/80 font-semibold">ИНТЕРФЕЙС:</span> Различные визуальные улучшения.</li>
+            <li><span class="text-green-400 font-semibold">СУПЕР РЕЖИМ:</span> В настройках добавлен "Супер Режим" для максимальной производительности, ускоряющий анимации и отключающий лишние эффекты.</li>
+            <li><span class="text-blue-400 font-semibold">ИСПРАВЛЕНИЯ:</span> Устранены ошибки с самопроизвольной прокруткой кейса и рассинхронизацией звука.</li>
+            <li class="font-bold text-yellow-300/70 mt-4 pt-2 border-t border-gray-600">Обновление v3.3.0</li>
+            <li><span class="text-green-400/80 font-semibold">УЛУЧШЕНИЕ ПРОИЗВОДИТЕЛЬНОСТИ:</span> Ускорена начальная загрузка и открытие x10.</li>
+            <li><span class="text-purple-400/80 font-semibold">УЛУЧШЕННЫЙ ИНТЕРФЕЙС:</span> Обновлен дизайн окна результатов x10.</li>
         </ul>
     </div><button onclick="window.closeUpdatesScreen()" class="w-full py-3 bg-blue-500 hover:bg-blue-400 font-bold rounded-xl mt-6">Начать играть!</button></div></div>
     <div id="reset-confirm-modal" class="modal fixed inset-0 flex items-center justify-center z-[800] p-4" style="display: none;"><div class="modal-content p-8 rounded-2xl text-center shadow-2xl w-full max-w-sm border-t-4 border-red-500"><h3 class="text-2xl font-extrabold text-red-400 mb-4">Подтверждение Сброса</h3><p class="text-md mb-4">Это действие **нельзя отменить**. Чтобы подтвердить, введите <code class="bg-gray-900 text-red-400 font-mono p-1 rounded">удалить данные</code> в поле ниже.</p><input id="reset-confirm-input" type="text" class="w-full border rounded-lg p-2 text-center mb-4 focus:outline-none focus:ring-2 focus:ring-red-500" placeholder="удалить данные"><div class="flex space-x-4"><button onclick="window.closeResetConfirmation()" class="flex-1 py-3 bg-gray-600 hover:bg-gray-500 font-bold rounded-xl">Отмена</button><button id="reset-confirm-button" onclick="window.performReset()" class="flex-1 py-3 bg-red-800 text-gray-500 font-bold rounded-xl cursor-not-allowed" disabled>Сбросить</button></div></div></div>
@@ -2032,9 +1806,9 @@
         </div>
     </div>
      <div id="x10-win-modal" class="modal fixed inset-0 flex items-center justify-center z-[1300] p-4" style="display: none;">
-        <div class="modal-content p-6 rounded-2xl w-full max-w-2xl">
+        <div class="modal-content p-6 rounded-2xl w-full max-w-3xl">
             <h3 class="text-3xl font-extrabold text-center mb-4">Ваши новые питомцы!</h3>
-            <div id="x10-win-grid" class="grid grid-cols-5 gap-3 max-h-[60vh] overflow-y-auto p-2">
+            <div id="x10-win-grid" class="grid gap-3 max-h-[60vh] overflow-y-auto p-2">
                 <!-- Results will be shown here -->
             </div>
             <button onclick="window.closeX10WinModal()" class="w-full mt-4 py-3 bg-blue-500 hover:bg-blue-400 font-bold rounded-xl">Продолжить</button>
@@ -2060,3 +1834,4 @@
     </div>
 </body>
 </html>
+
