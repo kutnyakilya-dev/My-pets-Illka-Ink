@@ -20,6 +20,8 @@
         let passiveIntervalId = null; 
         let lastSoundTime = 0; 
         let currentCaseId = 'farmer'; 
+        let lastDustEffectTime = 0; 
+        const DUST_EFFECT_COOLDOWN = 100;
         window.gameState = {
             paws: 0.00, 
             baseClickValue: 0.09,
@@ -668,10 +670,16 @@
         }
         
         function createDustEffect() {
+            const now = Date.now();
+            if (now - lastDustEffectTime < DUST_EFFECT_COOLDOWN) {
+                return;
+            }
+            lastDustEffectTime = now;
+
             const button = document.getElementById('click-button');
             const rect = button.getBoundingClientRect();
             const container = document.getElementById('dust-container');
-            const particleCount = 30;
+            const particleCount = 15; // Уменьшено с 30 для оптимизации
             const startX = rect.left + rect.width / 2;
             const startY = rect.top + rect.height / 2;
 
@@ -1533,3 +1541,4 @@
     </div>
 </body>
 </html>
+
